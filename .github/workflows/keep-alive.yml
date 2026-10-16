@@ -1,0 +1,20 @@
+name: Manter Supabase ativo
+
+# Faz uma consulta simples ao banco a cada 3 dias, para o Supabase gratuito nao pausar por inatividade.
+# A URL e a chave publishable sao publicas por natureza; nenhum segredo e usado aqui.
+on:
+  schedule:
+    - cron: "0 12 */3 * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consulta ao banco
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://tifbwhtoltcrfhtguowv.supabase.co/rest/v1/sp_fichas?select=id&limit=1" \
+            -H "apikey: sb_publishable_P5YAPjnLseHf_AYFWShxrg_v3oafkhU")
+          echo "Resposta do Supabase: $status"
+          test "$status" = "200"

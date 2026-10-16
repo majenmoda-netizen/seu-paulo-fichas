@@ -1,0 +1,14 @@
+{
+  "name": "Hamburgueria do Seu Paulo",
+  "short_name": "Seu Paulo",
+  "description": "Vendas por fichas nos eventos",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FFFFFF",
+  "theme_color": "#DA291C",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#DA291C">
+  <title>Hamburgueria do Seu Paulo</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css?v=1">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">Hamburgueria do Seu Paulo</div>
+    <div id="sync-badge" class="sync" role="status"></div>
+  </header>
+
+  <div class="event-bar">
+    <label>Evento
+      <select id="event-select"></select>
+    </label>
+  </div>
+
+  <main>
+    <section class="screen" data-screen="vender">
+      <div id="produtos-grid" class="grid-produtos"></div>
+
+      <details class="quick" id="quick">
+        <summary>+ Novo produto rápido</summary>
+        <form id="quick-form" class="form-row" novalidate>
+          <input type="text" name="nome" placeholder="Nome (ex.: Cerveja)" required>
+          <input type="text" name="preco" inputmode="decimal" placeholder="Preço (ex.: 6,00)" required>
+          <select name="ficha"></select>
+          <button type="submit" class="btn">Salvar produto</button>
+        </form>
+        <p id="quick-message" class="muted small"></p>
+      </details>
+
+      <div id="carrinho" class="carrinho"></div>
+    </section>
+
+    <section class="screen" data-screen="vendas">
+      <h1>Vendas do evento</h1>
+      <div id="vendas-resumo" class="chips-row"></div>
+      <div id="vendas-lista"></div>
+    </section>
+
+    <section class="screen" data-screen="produtos">
+      <h1>Produtos</h1>
+      <form id="produto-form" class="card form-grid" novalidate>
+        <h2 id="produto-titulo">Novo produto</h2>
+        <input type="hidden" name="id">
+        <label>Nome<input type="text" name="nome" required placeholder="Ex.: Chope"></label>
+        <label>Preço (R$)<input type="text" name="preco" inputmode="decimal" required placeholder="Ex.: 8,00"></label>
+        <label>Categoria (opcional)<input type="text" name="categoria" placeholder="Ex.: Bebidas"></label>
+        <label>Ficha deste produto (opcional)<select name="ficha"></select></label>
+        <div class="actions">
+          <button type="submit" class="btn">Salvar</button>
+          <button type="button" class="link" id="produto-cancelar" hidden>Cancelar edição</button>
+          <span id="produto-message" class="muted small"></span>
+        </div>
+      </form>
+      <div id="produtos-lista"></div>
+    </section>
+
+    <section class="screen" data-screen="fichas">
+      <h1>Fichas</h1>
+      <p class="muted">Cadastre os valores das fichas que existem. O sistema usa estes valores para dizer quais fichas entregar em cada venda.</p>
+      <form id="ficha-form" class="card form-grid" novalidate>
+        <h2 id="ficha-titulo">Nova ficha</h2>
+        <input type="hidden" name="id">
+        <label>Valor (R$)<input type="text" name="valor" inputmode="decimal" required placeholder="Ex.: 12,00"></label>
+        <label>Cor<select name="cor"></select></label>
+        <div class="actions">
+          <button type="submit" class="btn">Salvar</button>
+          <button type="button" class="link" id="ficha-cancelar" hidden>Cancelar edição</button>
+          <span id="ficha-message" class="muted small"></span>
+        </div>
+      </form>
+      <div id="fichas-lista"></div>
+    </section>
+
+    <section class="screen" data-screen="evento">
+      <h1>Eventos e fechamento</h1>
+      <form id="evento-form" class="card form-grid" novalidate>
+        <h2>Novo evento</h2>
+        <label>Nome<input type="text" name="nome" required placeholder="Ex.: Festa junina da escola"></label>
+        <label>Data<input type="date" name="data" required></label>
+        <div class="actions">
+          <button type="submit" class="btn">Criar e usar este evento</button>
+          <span id="evento-message" class="muted small"></span>
+        </div>
+      </form>
+      <div id="fechamento"></div>
+    </section>
+  </main>
+
+  <nav class="tabs" aria-label="Menu">
+    <button data-tab="vender" class="active">Vender</button>
+    <button data-tab="vendas">Vendas</button>
+    <button data-tab="produtos">Produtos</button>
+    <button data-tab="fichas">Fichas</button>
+    <button data-tab="evento">Evento</button>
+  </nav>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="config.js?v=1"></script>
+  <script src="app.js?v=1"></script>
+</body>
+</html>

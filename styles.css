@@ -91,6 +91,8 @@ input:focus, select:focus { outline: 1px solid var(--red); outline-offset: 0; bo
 .btn:active { background: var(--red-dark); }
 .btn.secondary { background: #fff; color: var(--red); }
 .link { background: none; border: none; color: var(--red); padding: 4px 6px; cursor: pointer; font-size: 13px; }
+.link.danger { border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; margin-top: 4px; }
+.link.perigo { background: var(--red); color: #fff; border-color: var(--red); }
 
 .card {
   background: var(--card);

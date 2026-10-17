@@ -415,7 +415,7 @@ function renderVendas() {
             </div>
             <div class="acoes">
               <span class="preco">${money(v.total)}</span>
-              ${v.cancelada ? '<span class="small muted">cancelada</span>' : `<button class="link" data-cancelar="${esc(v.id)}" type="button">Cancelar</button>`}
+              ${v.cancelada ? '<span class="small muted">cancelada</span>' : `<button class="link danger" data-cancelar="${esc(v.id)}" type="button">Cancelar venda</button>`}
             </div>
           </div>`
         )
@@ -437,7 +437,7 @@ function renderProdutos() {
             <div class="acoes">
               <span class="preco">${money(p.preco)}</span>
               <button class="link" data-edit-produto="${esc(p.id)}" type="button">Editar</button>
-              <button class="link" data-del-produto="${esc(p.id)}" type="button">Remover</button>
+              <button class="link danger" data-del-produto="${esc(p.id)}" type="button">Remover</button>
             </div>
           </div>`
         )
@@ -454,7 +454,7 @@ function renderFichas() {
             <div class="info">${fichaChip(f.valor)}</div>
             <div class="acoes">
               <button class="link" data-edit-ficha="${esc(f.id)}" type="button">Editar</button>
-              <button class="link" data-del-ficha="${esc(f.id)}" type="button">Remover</button>
+              <button class="link danger" data-del-ficha="${esc(f.id)}" type="button">Remover</button>
             </div>
           </div>`
         )
@@ -574,6 +574,34 @@ function render() {
 
 // ---------- Ações ----------
 
+// Confirmação sem janelinha: o 1º toque pede confirmação no próprio botão, o 2º toque executa.
+let armado = null;
+function confirmarToque(botao, textoAviso, executar) {
+  if (armado && armado.botao === botao) {
+    clearTimeout(armado.timer);
+    armado = null;
+    executar();
+    return;
+  }
+  if (armado) {
+    clearTimeout(armado.timer);
+    armado.botao.textContent = armado.original;
+    armado.botao.classList.remove("perigo");
+  }
+  const original = botao.textContent;
+  botao.textContent = textoAviso;
+  botao.classList.add("perigo");
+  armado = {
+    botao,
+    original,
+    timer: setTimeout(() => {
+      botao.textContent = original;
+      botao.classList.remove("perigo");
+      armado = null;
+    }, 4000),
+  };
+}
+
 function registrarVenda() {
   const itens = cartItens();
   if (itens.length === 0) {
@@ -687,9 +715,11 @@ function ligarEventos() {
     const id = e.target.dataset.cancelar;
     if (!id) return;
     const v = state.vendas.find((x) => x.id === id);
-    if (!v || !window.confirm(`Cancelar a venda de ${money(v.total)}? Ela deixa de contar nos totais.`)) return;
-    salvar("vendas", { ...v, cancelada: true });
-    toast("Venda cancelada");
+    if (!v) return;
+    confirmarToque(e.target, "Toque para confirmar", () => {
+      salvar("vendas", { ...v, cancelada: true });
+      toast("Venda cancelada");
+    });
   });
 
   // Produtos
@@ -714,11 +744,13 @@ function ligarEventos() {
       f.scrollIntoView({ behavior: "smooth", block: "start" });
     } else if (del) {
       const p = state.produtos.find((x) => x.id === del);
-      if (p && window.confirm(`Remover "${p.nome}"? As vendas já feitas continuam registradas.`)) {
-        salvar("produtos", { ...p, ativo: false });
-        delete cart[p.id];
-        render();
-      }
+      if (p)
+        confirmarToque(e.target, "Toque para confirmar", () => {
+          salvar("produtos", { ...p, ativo: false });
+          delete cart[p.id];
+          render();
+          toast(`"${p.nome}" removido`);
+        });
     }
   });
 
@@ -757,7 +789,11 @@ function ligarEventos() {
       f.scrollIntoView({ behavior: "smooth", block: "start" });
     } else if (del) {
       const x = state.fichas.find((y) => y.id === del);
-      if (x && window.confirm(`Remover a ficha de ${money(x.valor)}? As vendas já feitas continuam registradas.`)) salvar("fichas", { ...x, ativa: false });
+      if (x)
+        confirmarToque(e.target, "Toque para confirmar", () => {
+          salvar("fichas", { ...x, ativa: false });
+          toast("Ficha removida");
+        });
     }
   });
 

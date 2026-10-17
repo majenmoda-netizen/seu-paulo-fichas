@@ -380,8 +380,8 @@ function renderVender() {
     </div>
     <div class="cart-linha">
       <select id="cart-modo" aria-label="Como calcular as fichas">
-        <option value="total" ${ui.modo === "total" ? "selected" : ""}>Fichas pelo total</option>
-        <option value="produto" ${ui.modo === "produto" ? "selected" : ""}>Fichas por produto</option>
+        <option value="total" ${ui.modo === "total" ? "selected" : ""}>Pelo total</option>
+        <option value="produto" ${ui.modo === "produto" ? "selected" : ""}>Por produto</option>
       </select>
       <select id="cart-forma" aria-label="Forma de pagamento">
         ${FORMAS.map((f) => `<option ${ui.forma === f ? "selected" : ""}>${f}</option>`).join("")}

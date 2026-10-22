@@ -296,7 +296,7 @@ function esRenderPedido() {
   $("#pedido-produtos").innerHTML = ES.produtos.map((p) => {
     const qtd = ESP.itens[p.id] ? ESP.itens[p.id].qtd : 0;
     return `<button type="button" class="prod ${qtd ? "sel" : ""}" data-add="${esc(p.id)}">
-      <span>${esc(p.nome)}</span><span class="small">${esFmt(p.preco)}</span>${qtd ? `<b class="badge-qtd">${qtd}</b>` : ""}</button>`;
+      <span>${esc(p.nome)}</span><span class="small">${esFmt(p.preco)}</span>${qtd ? `<b class="badge-qtd">${qtd}</b><span data-sub="${esc(p.id)}" style="display:inline-block;margin-top:6px;padding:4px 12px;border:1px solid #c0392b;border-radius:999px;color:#c0392b;font-size:13px;font-weight:700;background:#fff">− Tirar 1</span>` : ""}</button>`;
   }).join("");
   // Carrinho
   const linhas = Object.entries(ESP.itens).map(([id, it]) => `<div class="linha">
@@ -614,6 +614,8 @@ function esLigarEventos() {
   });
   document.querySelectorAll("[data-tipo]").forEach((b) => b.addEventListener("click", () => { ESP.tipo = b.dataset.tipo; esRenderPedido(); }));
   $("#pedido-produtos").addEventListener("click", (e) => {
+    const sub = e.target.closest("[data-sub]");
+    if (sub) { const it = ESP.itens[sub.dataset.sub]; if (it) { it.qtd -= 1; if (it.qtd <= 0) delete ESP.itens[sub.dataset.sub]; } return esRenderPedido(); }
     const b = e.target.closest("[data-add]"); if (!b) return;
     const p = ES.produtos.find((x) => x.id === b.dataset.add);
     const it = ESP.itens[p.id] || { nome: p.nome, qtd: 0, preco: Number(p.preco) };

@@ -1,6 +1,6 @@
 // Guarda o app no aparelho para abrir mesmo sem internet. Os dados do banco nunca vêm do cache.
-const CACHE = "seu-paulo-v17";
-const SHELL = ["./", "index.html", "styles.css?v=5", "app.js?v=7", "espetinhos.js?v=11", "config.js?v=1", "manifest.webmanifest", "icon.svg"];
+const CACHE = "seu-paulo-v18";
+const SHELL = ["./", "index.html", "styles.css?v=5", "app.js?v=7", "espetinhos.js?v=12", "config.js?v=1", "manifest.webmanifest", "icon.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

@@ -408,7 +408,8 @@ function esRenderPedidos() {
       <div class="acoes"><span class="preco">${esFmt(p.total)}</span>
         ${p.status === "aberto" ? `<button class="btn" data-pago="${esc(p.id)}" type="button">Receber</button>` : ""}
         ${p.status === "aberto" && p.tipo === "entrega" ? `<button class="link" data-entregue="${esc(p.id)}" type="button">Entregue</button>` : ""}
-        <button class="link" data-imprimir-recibo="${esc(p.id)}" type="button">Imprimir recibo</button></div></div>`;
+        <button class="link" data-imprimir-recibo="${esc(p.id)}" type="button">Imprimir recibo</button>
+        <button class="link" data-baixar-pdf="${esc(p.id)}" type="button">Baixar PDF</button></div></div>`;
   }).join("") : '<p class="muted">Nenhum pedido nesta visão.</p>';
 }
 
@@ -456,11 +457,67 @@ function esDocumentoRecibo(p) {
     <div class="rc-c">Obrigado e volte sempre!</div>`;
 }
 
+// Gera o PDF do recibo (bobina de 80 mm, preto e branco) e baixa direto, sem passar pela impressão.
+function esGerarPdf(p) {
+  const jsPDF = window.jspdf && window.jspdf.jsPDF;
+  if (!jsPDF) return null;
+  const itens = p.itens || [];
+  const W = 80, M = 5;
+  // Mede o conteúdo antes para a página ter a altura certa (sem sobra de papel).
+  const medidor = new jsPDF({ unit: "mm", format: [W, 400] });
+  medidor.setFontSize(9);
+  const linhasItens = itens.map((i) => medidor.splitTextToSize(`${i.qtd}x ${i.nome}`, W - 2 * M - 22));
+  const extraEntrega = p.tipo === "entrega" ? 3 + (p.endereco ? 1 : 0) + (p.bairro ? 1 : 0) : 0;
+  const altura = Math.max(90, 66 + linhasItens.reduce((n, l) => n + l.length * 4.2, 0) + extraEntrega * 4.2 + (p.taxa_entrega ? 5 : 0) + (p.forma_pagamento ? 5 : 0) + (p.observacao ? 9 : 0));
+  // Sem isto o gerador gira a página quando a altura é menor que a largura (recibo curto sairia cortado).
+  const doc = new jsPDF({ unit: "mm", format: [W, altura], orientation: "portrait" });
+  let y = 8;
+  const centro = (txt, tam, neg) => { doc.setFont("helvetica", neg ? "bold" : "normal"); doc.setFontSize(tam); doc.text(String(txt), W / 2, y, { align: "center" }); y += tam * 0.42 + 1.6; };
+  const lado = (esq, dir, tam, neg) => { doc.setFont("helvetica", neg ? "bold" : "normal"); doc.setFontSize(tam); doc.text(String(esq), M, y); doc.text(String(dir), W - M, y, { align: "right" }); y += tam * 0.42 + 1.6; };
+  const sep = () => { y += 0.6; doc.setLineDashPattern([0.8, 0.8], 0); doc.setLineWidth(0.2); doc.line(M, y, W - M, y); doc.setLineDashPattern([], 0); y += 4; };
+
+  const data = new Date(p.criado_em || Date.now());
+  const rotulo = p.tipo === "mesa" ? `MESA ${p.mesa || "-"}` : p.tipo === "entrega" ? "ENTREGA" : `RETIRADA: ${p.cliente_nome || ""}`;
+  centro("ESPETINHOS DO SEU PAULO", 13, true);
+  centro("RECIBO DE PEDIDO", 9, false);
+  sep();
+  lado(`Pedido ${p.id.slice(0, 6).toUpperCase()}`, `${data.toLocaleDateString("pt-BR")} ${data.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`, 9, false);
+  centro(rotulo, 11, true);
+  if (p.tipo === "entrega") {
+    if (p.cliente_nome) centro(p.cliente_nome, 9, false);
+    if (p.endereco) centro(p.endereco, 9, false);
+    if (p.bairro) centro(p.bairro, 9, false);
+  }
+  sep();
+  itens.forEach((i, k) => {
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+    doc.text(linhasItens[k], M, y);
+    doc.text(esFmt(i.qtd * i.preco), W - M, y, { align: "right" });
+    y += linhasItens[k].length * 4.2;
+  });
+  sep();
+  if (p.taxa_entrega) lado("Taxa de entrega", esFmt(p.taxa_entrega), 9, false);
+  y += 0.6; doc.setLineWidth(0.5); doc.line(M, y, W - M, y); y += 4.6;
+  lado("TOTAL", esFmt(p.total), 13, true);
+  if (p.forma_pagamento) centro(`Pagamento: ${p.forma_pagamento}`, 9, false);
+  if (p.observacao) { doc.setFont("helvetica", "italic"); doc.setFontSize(9); doc.text(doc.splitTextToSize(`Obs.: ${p.observacao}`, W - 2 * M), W / 2, y, { align: "center" }); y += 5; }
+  sep();
+  centro("Obrigado e volte sempre!", 9, false);
+  return doc;
+}
+
+function esBaixarPdf(p) {
+  const doc = esGerarPdf(p);
+  if (!doc) return esMsg("#pedido-msg", "Não consegui carregar o gerador de PDF. Confira a internet e tente de novo.");
+  doc.save(`Recibo-${p.id.slice(0, 6).toUpperCase()}.pdf`);
+}
+
 // Imprime sem abrir janela nova: usa a área de impressão da própria página.
 // A altura da bobina acompanha o tamanho do pedido, para não gastar papel à toa.
 function esImprimirDoc(p) {
   const area = document.getElementById("print-area");
-  const altura = Math.max(60, 50 + (p.itens || []).length * 9 + (p.tipo === "entrega" ? 28 : 0) + (p.observacao ? 8 : 0));
+  // A altura nunca pode ser menor que a largura (80 mm): se for, o navegador gira a página e o recibo sai cortado.
+  const altura = Math.max(90, 50 + (p.itens || []).length * 9 + (p.tipo === "entrega" ? 28 : 0) + (p.observacao ? 8 : 0));
   area.innerHTML = `<style>@page { size: 80mm ${altura}mm; margin: 0; }${RC_CSS}</style>` + esDocumentoRecibo(p);
   setTimeout(() => window.print(), 50);
 }
@@ -519,6 +576,7 @@ function esLigarEventos() {
     const t = e.target;
     if (t.dataset.pago) { const forma = prompt("Forma de pagamento: Dinheiro, Pix ou Cartão", "Dinheiro"); if (forma) esMudarStatus(t.dataset.pago, "pago", forma); }
     if (t.dataset.entregue) esMudarStatus(t.dataset.entregue, "entregue");
+    if (t.dataset.baixarPdf) { const p = ES.pedidos.find((x) => x.id === t.dataset.baixarPdf); if (p) esBaixarPdf(p); }
     if (t.dataset.imprimirRecibo) { const p = ES.pedidos.find((x) => x.id === t.dataset.imprimirRecibo); if (p) esImprimirDoc(p); }
     if (t.dataset.reimprimir) { const p = ES.pedidos.find((x) => x.id === t.dataset.reimprimir); if (p) esImprimir(p).then(() => esMsg("#pedido-msg", "Comandas reenviadas para impressão.")); }
   });

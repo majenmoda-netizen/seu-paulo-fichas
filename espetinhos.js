@@ -94,6 +94,8 @@ function esAbrirFicha(produtoId) {
   const linhas = ES.fichas.filter((f) => f.produto_id === produtoId);
   const opcoes = ES.insumos.map((i) => `<option value="${esc(i.id)}">${esc(i.nome)} (${esc(i.unidade)})</option>`).join("");
   $("#ficha-tecnica-box").hidden = false;
+  // A caixa fica acima da lista: leva a tela até ela, senão parece que "não abriu".
+  setTimeout(() => $("#ficha-tecnica-box").scrollIntoView({ behavior: "smooth", block: "start" }), 0);
   $("#ficha-tecnica-box").innerHTML = `
     <h2>Ficha técnica: ${esc(p.nome)}</h2>
     <p class="muted small">Informe quanto de cada insumo sai em <b>1 unidade</b> deste produto. Ex.: 1 pão, 150 g de carne, 1 fatia de queijo.</p>

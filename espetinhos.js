@@ -214,8 +214,13 @@ function esRenderPedido() {
   $("#campo-entrega").hidden = ESP.tipo !== "entrega";
   $("#campo-balcao").hidden = ESP.tipo !== "balcao";
   // Clientes para entrega
-  $("#pedido-cliente").innerHTML = '<option value="">Novo cliente</option>' + ES.clientes.map((c) => `<option value="${esc(c.id)}" ${c.id === ESP.clienteId ? "selected" : ""}>${esc(c.nome)}${c.bairro ? " · " + esc(c.bairro) : ""}</option>`).join("");
+  // Guarda a escolha atual antes de redesenhar a lista (senão o bairro volta para "Escolha o bairro").
+  const clienteAtual = $("#pedido-cliente").value;
+  const bairroAtual = $("#pedido-bairro").value;
+  $("#pedido-cliente").innerHTML = '<option value="">Novo cliente</option>' + ES.clientes.map((c) => `<option value="${esc(c.id)}">${esc(c.nome)}${c.bairro ? " · " + esc(c.bairro) : ""}</option>`).join("");
+  $("#pedido-cliente").value = clienteAtual;
   $("#pedido-bairro").innerHTML = '<option value="">Escolha o bairro</option>' + ES.bairros.map((b) => `<option value="${esc(b.nome)}">${esc(b.nome)} (${esFmt(b.taxa)})</option>`).join("");
+  $("#pedido-bairro").value = bairroAtual;
 }
 
 async function esEnviarPedido() {

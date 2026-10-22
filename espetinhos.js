@@ -92,7 +92,7 @@ async function esNovoProduto(form) {
 function esAbrirFicha(produtoId) {
   const p = ES.produtos.find((x) => x.id === produtoId);
   const linhas = ES.fichas.filter((f) => f.produto_id === produtoId);
-  const opcoes = ES.insumos.map((i) => `<option value="${esc(i.id)}">${esc(i.nome)} (${esc(i.unidade)})</option>`).join("");
+  const opcoes = ES.insumos.map((i) => `<option value="${esc(i.id)}">${esc(i.nome)} (${esc(String(i.unidade).toUpperCase())})</option>`).join("");
   $("#ficha-tecnica-box").hidden = false;
   // A caixa fica acima da lista: leva a tela até ela, senão parece que "não abriu".
   setTimeout(() => $("#ficha-tecnica-box").scrollIntoView({ behavior: "smooth", block: "start" }), 0);
@@ -102,7 +102,7 @@ function esAbrirFicha(produtoId) {
     ${linhas.map((f) => {
       const i = ES.insumos.find((x) => x.id === f.insumo_id);
       return `<div class="linha"><div class="info">${esc(i ? i.nome : "?")}</div>
-        <div class="acoes"><span>${Number(f.quantidade)} ${esc(i ? i.unidade : "")}</span>
+        <div class="acoes"><span>${Number(f.quantidade)} ${esc(i ? String(i.unidade).toUpperCase() : "")}</span>
         <button class="link danger" data-del-ficha="${esc(f.id)}" type="button">Remover</button></div></div>`;
     }).join("") || '<p class="muted">Ainda sem insumos nesta ficha.</p>'}
     <form id="ficha-linha-form" class="form-row" data-produto="${esc(produtoId)}">
@@ -165,9 +165,9 @@ function esRenderEstoque() {
     const venda = prod ? `<div class="small"><b>Vendido a ${esFmt(prod.preco)}</b>${markup === null ? "" : ` · markup ${markup.toFixed(0)}%`}</div>` : "";
     return `<div class="linha ${baixo ? "alerta" : ""}">
       <div class="info"><div class="titulo">${esc(i.nome)}</div>
-        <div class="small muted">${esc(i.categoria || "")} · custo ${esFmt(custo)} por ${esc(i.unidade)} · ${Number(i.estoque_atual)} ${esc(i.unidade)} valem ${esFmt(valor)}</div>
+        <div class="small muted">${esc(i.categoria || "")} · custo ${esFmt(custo)} por ${esc(String(i.unidade).toUpperCase())} · ${Number(i.estoque_atual)} ${esc(String(i.unidade).toUpperCase())} valem ${esFmt(valor)}</div>
         ${venda}</div>
-      <div class="acoes"><span class="preco">${Number(i.estoque_atual)} ${esc(i.unidade)}</span>
+      <div class="acoes"><span class="preco">${Number(i.estoque_atual)} ${esc(String(i.unidade).toUpperCase())}</span>
         <button class="link" data-editar-insumo="${esc(i.id)}" type="button">Editar</button>
         <button class="link" data-mov="${esc(i.id)}" type="button">Movimentar</button></div></div>`;
   }).join("") : '<p class="muted">Nenhum insumo. Cadastre carne, pão, açaí, chopp, bebidas, embalagens...</p>';
@@ -179,7 +179,7 @@ function esEditarInsumo(id) {
   const f = $("#estoque-form");
   f.elements.id.value = i.id;
   f.elements.nome.value = i.nome;
-  f.elements.unidade.value = i.unidade;
+  f.elements.unidade.value = String(i.unidade).toUpperCase();
   f.elements.categoria.value = i.categoria || "";
   f.elements.custo.value = String(Number(i.custo_unitario)).replace(".", ",");
   f.elements.total.value = "";
@@ -261,7 +261,7 @@ async function esMovimentar(insumoId, tipo, quantidade, custo, observacao) {
 
 // Janela própria para Movimentar (o navegador pode bloquear prompt()).
 function esDialogoMovimento(insumo) {
-  const u = esc(insumo.unidade);
+  const u = esc(String(insumo.unidade).toUpperCase());
   const box = document.createElement("div");
   box.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;z-index:1000";
   box.innerHTML = `<form class="card form-grid" style="max-width:380px;width:100%;margin:0" onsubmit="return false">

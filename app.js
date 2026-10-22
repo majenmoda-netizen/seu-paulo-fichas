@@ -7,7 +7,7 @@ const KEY = "seu-paulo:v1";
 const TABELAS = { fichas: "sp_fichas", produtos: "sp_produtos", eventos: "sp_eventos", vendas: "sp_vendas" };
 const COLUNAS = {
   fichas: ["id", "valor", "cor", "ativa", "atualizado_em"],
-  produtos: ["id", "nome", "preco", "categoria", "ficha_valor", "ativo", "atualizado_em"],
+  produtos: ["id", "nome", "preco", "categoria", "ficha_valor", "fichas_valores", "ativo", "atualizado_em"],
   eventos: ["id", "nome", "data", "aberto", "atualizado_em"],
   vendas: ["id", "evento_id", "criado_em", "total", "forma_pagamento", "itens", "fichas", "resto", "cancelada", "atualizado_em"],
 };
@@ -56,7 +56,7 @@ function load() {
 }
 
 let state = load();
-const ui = { tab: "vender", forma: "Dinheiro", modo: "total", editProduto: null, editFicha: null };
+const ui = { tab: "pedidos", forma: "Dinheiro", modo: "total", editProduto: null, editFicha: null };
 let cart = {}; // produto_id -> quantidade
 
 function save() {
@@ -221,15 +221,35 @@ function montarFichas(total, valores) {
 
 // Modo "por produto": cada produto tem uma ficha (cerveja = ficha de R$ 6). Se o preço não for múltiplo da
 // ficha do produto, ou se ele não tiver ficha, aquele item é montado pelo total.
+// Fichas que o produto aceita (pode ser mais de uma).
+const fichasDoProduto = (p) => (Array.isArray(p.fichas_valores) && p.fichas_valores.length ? p.fichas_valores.map(Number) : p.ficha_valor ? [Number(p.ficha_valor)] : []);
+
+// Menor quantidade de fichas (das escolhidas no produto) que soma exatamente o valor. null se não for possível.
+function combinacaoExata(total, valores) {
+  const alvo = Math.round(total * 100);
+  const moedas = [...new Set(valores.map((v) => Math.round(v * 100)))].filter((v) => v > 0);
+  if (!moedas.length || alvo < 0) return null;
+  const INF = 1e9;
+  const melhor = new Array(alvo + 1).fill(INF);
+  const usa = new Array(alvo + 1).fill(-1);
+  melhor[0] = 0;
+  for (let a = 1; a <= alvo; a++) {
+    for (const m of moedas) if (m <= a && melhor[a - m] + 1 < melhor[a]) { melhor[a] = melhor[a - m] + 1; usa[a] = m; }
+  }
+  if (melhor[alvo] >= INF) return null;
+  const out = new Map();
+  for (let a = alvo; a > 0; a -= usa[a]) out.set(usa[a] / 100, (out.get(usa[a] / 100) || 0) + 1);
+  return out;
+}
+
 function fichasPorProduto(itens, valores) {
   const soma = new Map();
   let resto = 0;
   const add = (valor, q) => soma.set(valor, (soma.get(valor) || 0) + q);
   itens.forEach((it) => {
-    const f = it.ficha_valor;
-    const k = f ? it.preco / f : 0;
-    if (f && Math.round(k) >= 1 && Math.abs(k - Math.round(k)) < 1e-9) {
-      add(f, it.quantidade * Math.round(k));
+    const combo = combinacaoExata(it.preco * it.quantidade, it.fichas || []);
+    if (combo) {
+      combo.forEach((q, valor) => add(valor, q));
     } else {
       const r = montarFichas(it.preco * it.quantidade, valores);
       r.fichas.forEach((x) => add(x.valor, x.quantidade));
@@ -268,15 +288,11 @@ function semearFichas() {
   FICHAS_INICIAIS.forEach(([valor, cor]) => salvar("fichas", { id: `ficha-${valor * 100}`, valor, cor, ativa: true }, { silencioso: true }));
 }
 
+// Não cria mais eventos sozinho: o evento só existe quando você cadastra na aba Evento.
 function garantirEvento() {
-  if (state.eventos.length === 0) {
-    const hoje = todayISO();
-    salvar("eventos", { id: `evento-${hoje}`, nome: `Evento ${formatDate(hoje)}`, data: hoje, aberto: true }, { silencioso: true });
-  }
-  if (!state.eventos.some((e) => e.id === state.eventoAtivo)) {
-    const recente = [...state.eventos].sort((a, b) => (a.data < b.data ? 1 : -1))[0];
-    state.eventoAtivo = recente.id;
-  }
+  if (state.eventoAtivo && state.eventos.some((e) => e.id === state.eventoAtivo)) return;
+  const recente = [...state.eventos].sort((a, b) => (a.data < b.data ? 1 : -1))[0];
+  state.eventoAtivo = recente ? recente.id : null;
 }
 
 const eventoAtivo = () => state.eventos.find((e) => e.id === state.eventoAtivo);
@@ -288,7 +304,7 @@ function cartItens() {
     .filter(([, q]) => q > 0)
     .map(([id, quantidade]) => {
       const p = state.produtos.find((x) => x.id === id);
-      return p ? { produto_id: p.id, nome: p.nome, preco: p.preco, quantidade, ficha_valor: p.ficha_valor ?? null } : null;
+      return p ? { produto_id: p.id, nome: p.nome, preco: p.preco, quantidade, fichas: fichasDoProduto(p) } : null;
     })
     .filter(Boolean);
 }
@@ -332,16 +348,13 @@ function renderEventos() {
 }
 
 function fillSelects() {
-  const fichasOpts = `<option value="">Sem ficha específica</option>${state.fichas
-    .filter((f) => f.ativa !== false)
-    .sort((a, b) => a.valor - b.valor)
-    .map((f) => `<option value="${f.valor}">Ficha de ${money(f.valor)}</option>`)
-    .join("")}`;
-  ["#quick-form [name=ficha]", "#produto-form [name=ficha]"].forEach((s) => {
-    const el = $(s);
-    const atual = el.value;
-    el.innerHTML = fichasOpts;
-    el.value = atual;
+  document.querySelectorAll("[data-fichas]").forEach((box) => {
+    const marcadas = [...box.querySelectorAll("input:checked")].map((i) => Number(i.value));
+    box.innerHTML = state.fichas
+      .filter((f) => f.ativa !== false)
+      .sort((a, b) => a.valor - b.valor)
+      .map((f) => `<label class="chk"><input type="checkbox" name="ficha" value="${f.valor}" ${marcadas.includes(f.valor) ? "checked" : ""}> Ficha de ${money(f.valor)}</label>`)
+      .join("") || '<span class="muted small">Cadastre as fichas na aba Fichas.</span>';
   });
   const cor = $("#ficha-form [name=cor]");
   if (!cor.options.length) cor.innerHTML = Object.entries(CORES).map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
@@ -356,7 +369,7 @@ function renderVender() {
           return `<div class="prod ${q ? "on" : ""}" data-add="${esc(p.id)}">
             <div class="prod-nome">${esc(p.nome)}</div>
             <div class="prod-preco">${money(p.preco)}</div>
-            ${p.ficha_valor ? `<div class="prod-ficha">ficha de ${money(p.ficha_valor)}</div>` : ""}
+            ${fichasDoProduto(p).length ? `<div class="prod-ficha">fichas: ${fichasDoProduto(p).map((v) => money(v)).join(" + ")}</div>` : ""}
             <div class="qtd">
               <button type="button" data-menos="${esc(p.id)}" aria-label="Tirar um">−</button>
               <strong>${q}</strong>
@@ -432,7 +445,7 @@ function renderProdutos() {
             <div class="info">
               <div class="titulo">${esc(p.nome)}</div>
               <div class="small muted">${esc(p.categoria || "")}</div>
-              ${p.ficha_valor ? fichaChip(p.ficha_valor) : ""}
+              ${fichasDoProduto(p).map((v) => fichaChip(v)).join("")}
             </div>
             <div class="acoes">
               <span class="preco">${money(p.preco)}</span>
@@ -603,6 +616,10 @@ function confirmarToque(botao, textoAviso, executar) {
 }
 
 function registrarVenda() {
+  if (!state.eventoAtivo) {
+    toast("Crie um evento na aba Evento antes de vender");
+    return;
+  }
   const itens = cartItens();
   if (itens.length === 0) {
     toast("Escolha pelo menos um produto");
@@ -634,11 +651,11 @@ function salvarProduto(form, { rapido = false } = {}) {
     mensagem.textContent = "Informe o nome e o preço (ex.: 6,00).";
     return false;
   }
-  const fichaValor = form.elements.ficha.value ? Number(form.elements.ficha.value) : null;
+  const fichas = [...form.querySelectorAll("input[name=ficha]:checked")].map((i) => Number(i.value));
   const id = !rapido && form.elements.id.value ? form.elements.id.value : uid();
   const categoria = !rapido && form.elements.categoria ? form.elements.categoria.value.trim() || null : null;
   const existente = state.produtos.find((p) => p.id === id);
-  salvar("produtos", { id, nome, preco: round2(preco), categoria: categoria ?? (existente ? existente.categoria : null), ficha_valor: fichaValor, ativo: true });
+  salvar("produtos", { id, nome, preco: round2(preco), categoria: categoria ?? (existente ? existente.categoria : null), fichas_valores: fichas, ficha_valor: fichas[0] ?? null, ativo: true });
   mensagem.textContent = "Produto salvo.";
   return true;
 }
@@ -646,6 +663,7 @@ function salvarProduto(form, { rapido = false } = {}) {
 function resetProdutoForm() {
   const form = $("#produto-form");
   form.reset();
+  form.querySelectorAll("input[name=ficha]").forEach((i) => (i.checked = false));
   form.elements.id.value = "";
   $("#produto-titulo").textContent = "Novo produto";
   $("#produto-cancelar").hidden = true;
@@ -738,7 +756,7 @@ function ligarEventos() {
       f.elements.nome.value = p.nome;
       f.elements.preco.value = String(p.preco).replace(".", ",");
       f.elements.categoria.value = p.categoria || "";
-      f.elements.ficha.value = p.ficha_valor ? String(p.ficha_valor) : "";
+      f.querySelectorAll("input[name=ficha]").forEach((i) => (i.checked = fichasDoProduto(p).includes(Number(i.value))));
       $("#produto-titulo").textContent = "Editar produto";
       $("#produto-cancelar").hidden = false;
       f.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -801,13 +819,14 @@ function ligarEventos() {
   $("#evento-form").addEventListener("submit", (e) => {
     e.preventDefault();
     const f = e.target;
-    const nome = f.elements.nome.value.trim();
-    if (!nome || !f.elements.data.value) {
-      $("#evento-message").textContent = "Informe o nome e a data.";
+    const data = f.elements.data.value;
+    if (!data) {
+      $("#evento-message").textContent = "Informe a data.";
       return;
     }
+    const nome = f.elements.nome.value.trim() || `Evento ${formatDate(data)}`;
     const id = uid();
-    salvar("eventos", { id, nome, data: f.elements.data.value, aberto: true });
+    salvar("eventos", { id, nome, data, aberto: true });
     state.eventoAtivo = id;
     save();
     f.reset();
@@ -835,7 +854,8 @@ function iniciar() {
   render();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
   sync();
-  setInterval(sync, 15000);
+  // Atualiza a cada 60 s, só quando a página está aberta na tela (economiza internet e deixa o app mais leve).
+  setInterval(() => { if (document.visibilityState === "visible") sync(); }, 60000);
 }
 
 iniciar();

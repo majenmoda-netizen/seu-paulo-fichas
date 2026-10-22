@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#DA291C">
-  <title>Hamburgueria do Seu Paulo</title>
+  <title>Espetinhos do Seu Paulo</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=3">
+  <link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
   <header class="top">
-    <div class="brand">Hamburgueria do Seu Paulo</div>
+    <div class="brand">Espetinhos do Seu Paulo</div>
     <div id="sync-badge" class="sync" role="status"></div>
   </header>
 
@@ -22,6 +22,71 @@
   </div>
 
   <main>
+    <section class="screen" data-screen="pedidos">
+      <h1>Pedidos</h1>
+      <div class="filtro-ped">
+        <button class="chip-btn active" data-tipo="mesa" type="button">Mesa</button>
+        <button class="chip-btn" data-tipo="entrega" type="button">Entrega</button>
+        <button class="chip-btn" data-tipo="balcao" type="button">Pessoa X</button>
+      </div>
+      <form id="pedido-form" class="card form-grid" onsubmit="return false">
+        <div id="campo-mesa"><label>Número da mesa<input type="text" name="mesa" placeholder="Ex.: 5"></label></div>
+        <div id="campo-balcao" hidden><label>Nome (opcional)<input type="text" name="pessoaX" placeholder="Ex.: Pessoa X"></label></div>
+        <div id="campo-entrega" hidden>
+          <label>Cliente
+            <select id="pedido-cliente"></select>
+          </label>
+          <label>Nome do cliente<input type="text" name="clienteNome" placeholder="Para cliente novo"></label>
+          <label>Telefone<input type="text" name="telefone" inputmode="tel"></label>
+          <label>Endereço<input type="text" name="endereco"></label>
+          <label>Bairro (define a taxa)<select id="pedido-bairro"></select></label>
+        </div>
+        <label>Observação<input type="text" name="obs" placeholder="Ex.: sem cebola"></label>
+      </form>
+      <h2 class="sub">Produtos</h2>
+      <div id="pedido-produtos" class="grid-prod"></div>
+      <div id="pedido-carrinho" class="card carrinho-ped"></div>
+      <div class="actions">
+        <button id="pedido-enviar" class="btn" type="button">Enviar para cozinha e caixa</button>
+        <span id="pedido-msg" class="muted small"></span>
+      </div>
+      <h2 class="sub">Hoje</h2>
+      <div id="pedidos-resumo" class="chips-row"></div>
+      <div class="chips-row"><button class="chip-btn active" data-filtro-ped="hoje" type="button">Hoje</button><button class="chip-btn" data-filtro-ped="todos" type="button">Todos</button></div>
+      <div id="pedidos-lista"></div>
+    </section>
+
+    <section class="screen" data-screen="cardapio">
+      <h1>Cardápio</h1>
+      <p class="muted small">O preço e o markup se ajustam sozinhos: mude um, e o outro recalcula. Você pode alterar qualquer um quando quiser.</p>
+      <form id="cardapio-form" class="card form-grid" onsubmit="return false">
+        <h2>Novo produto</h2>
+        <label>Nome<input type="text" name="nome" required placeholder="Ex.: X Godinhos"></label>
+        <label>Preço de venda (R$)<input type="text" name="preco" inputmode="decimal" required placeholder="Ex.: 14,99"></label>
+        <label>Categoria<input type="text" name="categoria" placeholder="Ex.: Lanches, Bebidas, Porções"></label>
+        <div class="actions"><button type="button" class="btn" id="cardapio-salvar">Cadastrar produto</button><span id="cardapio-msg" class="muted small"></span></div>
+      </form>
+      <div id="ficha-tecnica-box" class="card" hidden></div>
+      <div id="cardapio-lista"></div>
+    </section>
+
+    <section class="screen" data-screen="estoque">
+      <h1>Estoque</h1>
+      <p class="muted small">Cadastre carne, pão, açaí, chopp, bebidas e embalagens. A venda dá baixa automática nos insumos da ficha técnica de cada produto.</p>
+      <div id="estoque-alerta"></div>
+      <form id="estoque-form" class="card form-grid" onsubmit="return false">
+        <h2>Novo insumo</h2>
+        <label>Nome<input type="text" name="nome" required placeholder="Ex.: Pão de hambúrguer"></label>
+        <label>Unidade<select name="unidade"><option>un</option><option>kg</option><option>g</option><option>l</option><option>ml</option><option>pct</option></select></label>
+        <label>Categoria<input type="text" name="categoria" placeholder="Carne, pão, bebida, açaí..."></label>
+        <label>Custo por unidade (R$)<input type="text" name="custo" inputmode="decimal" placeholder="Ex.: 1,20"></label>
+        <label>Estoque inicial<input type="text" name="inicial" inputmode="decimal" placeholder="Ex.: 100"></label>
+        <label>Estoque mínimo (alerta)<input type="text" name="minimo" inputmode="decimal" placeholder="Ex.: 20"></label>
+        <div class="actions"><button type="button" class="btn" id="estoque-salvar">Cadastrar insumo</button><span id="estoque-msg" class="muted small"></span></div>
+      </form>
+      <div id="estoque-lista"></div>
+    </section>
+
     <section class="screen" data-screen="vender">
       <div id="produtos-grid" class="grid-produtos"></div>
 
@@ -30,7 +95,7 @@
         <form id="quick-form" class="form-row" novalidate>
           <input type="text" name="nome" placeholder="Nome (ex.: Cerveja)" required>
           <input type="text" name="preco" inputmode="decimal" placeholder="Preço (ex.: 6,00)" required>
-          <select name="ficha"></select>
+          <div class="fichas-box" data-fichas></div>
           <button type="submit" class="btn">Salvar produto</button>
         </form>
         <p id="quick-message" class="muted small"></p>
@@ -53,7 +118,7 @@
         <label>Nome<input type="text" name="nome" required placeholder="Ex.: Chope"></label>
         <label>Preço (R$)<input type="text" name="preco" inputmode="decimal" required placeholder="Ex.: 8,00"></label>
         <label>Categoria (opcional)<input type="text" name="categoria" placeholder="Ex.: Bebidas"></label>
-        <label>Ficha deste produto (opcional)<select name="ficha"></select></label>
+        <div class="campo-fichas"><span class="rotulo">Fichas deste produto (marque todas que servem)</span><div class="fichas-box" data-fichas></div></div>
         <div class="actions">
           <button type="submit" class="btn">Salvar</button>
           <button type="button" class="link" id="produto-cancelar" hidden>Cancelar edição</button>
@@ -84,7 +149,7 @@
       <h1>Eventos e fechamento</h1>
       <form id="evento-form" class="card form-grid" novalidate>
         <h2>Novo evento</h2>
-        <label>Nome<input type="text" name="nome" required placeholder="Ex.: Festa junina da escola"></label>
+        <label>Nome (opcional)<input type="text" name="nome" placeholder="Se vazio, usa a data"></label>
         <label>Data<input type="date" name="data" required></label>
         <div class="actions">
           <button type="submit" class="btn">Criar e usar este evento</button>
@@ -96,7 +161,10 @@
   </main>
 
   <nav class="tabs" aria-label="Menu">
-    <button data-tab="vender" class="active">Vender</button>
+    <button data-tab="pedidos" class="active">Pedidos</button>
+    <button data-tab="cardapio">Cardápio</button>
+    <button data-tab="estoque">Estoque</button>
+    <button data-tab="vender">Vender</button>
     <button data-tab="vendas">Vendas</button>
     <button data-tab="produtos">Produtos</button>
     <button data-tab="fichas">Fichas</button>
@@ -107,6 +175,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="config.js?v=1"></script>
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=6"></script>
+  <script src="espetinhos.js?v=2"></script>
 </body>
 </html>

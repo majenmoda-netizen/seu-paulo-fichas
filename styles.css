@@ -273,3 +273,33 @@ td.num, th.num { text-align: right; white-space: nowrap; }
   .toast { bottom: 40px; }
   .form-row { grid-template-columns: 2fr 1fr 1fr auto; align-items: center; }
 }
+
+/* ---------- Espetinhos: pedidos, cardápio e estoque ---------- */
+.tabs { overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+.tabs button { flex: 0 0 auto; }
+.chip-btn { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 8px 14px; margin: 0 6px 6px 0; font: inherit; color: var(--text); }
+.chip-btn.active { background: var(--red); border-color: var(--red); color: #fff; }
+.filtro-ped, .chips-row { display: flex; flex-wrap: wrap; }
+.grid-prod { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.prod { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font: inherit; color: var(--text); }
+.prod.sel { border-color: var(--red); background: var(--tint); }
+.badge-qtd { position: absolute; top: 6px; right: 6px; background: var(--red); color: #fff; border-radius: 999px; min-width: 22px; height: 22px; line-height: 22px; text-align: center; font-size: 12px; }
+.carrinho-ped { margin-bottom: 12px; padding: 8px 14px; }
+.total { display: flex; justify-content: space-between; align-items: center; border-top: 2px solid var(--line); padding: 10px 0 4px; font-size: 17px; }
+.total b { color: var(--red); }
+.cat { margin: 18px 0 6px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.cardapio-item .acoes { flex-wrap: wrap; justify-content: flex-end; }
+.mini { display: flex; flex-direction: column; font-size: 11px; color: var(--muted); }
+.mini input { width: 86px; }
+.alerta { border-left: 3px solid var(--red); }
+.aviso { background: var(--tint); color: var(--red-dark); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 14px; }
+.kpi { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; display: flex; flex-direction: column; min-width: 130px; }
+.kpi b { font-size: 18px; }
+.pedido.pago { opacity: .7; }
+.pedido.entregue { border-left: 3px solid #2e7d32; }
+.sub { margin: 18px 0 8px; font-size: 15px; }
+
+.fichas-box { display: flex; flex-wrap: wrap; gap: 8px; }
+.chk { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; background: var(--card); }
+.campo-fichas { display: flex; flex-direction: column; gap: 6px; }
+.rotulo { color: var(--muted); font-size: 13px; }

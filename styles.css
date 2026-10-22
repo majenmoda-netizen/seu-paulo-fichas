@@ -303,3 +303,11 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 .chk { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; background: var(--card); }
 .campo-fichas { display: flex; flex-direction: column; gap: 6px; }
 .rotulo { color: var(--muted); font-size: 13px; }
+
+/* Impressão: mostra só o recibo, em preto e branco */
+#print-area { display: none; }
+@media print {
+  body * { visibility: hidden !important; }
+  #print-area, #print-area * { visibility: visible !important; }
+  #print-area { display: block !important; position: absolute; left: 0; top: 0; width: 72mm; color: #000; background: #fff; }
+}

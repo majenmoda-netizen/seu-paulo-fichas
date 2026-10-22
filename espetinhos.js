@@ -139,14 +139,32 @@ async function esRecalcularCustos() {
 }
 
 // ---------- Estoque ----------
+const chaveNome = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+
+// Bebida vendida como está (ex.: Ref Vedete 2 L): o insumo de mesmo nome vira a ficha de 1 unidade.
+async function esVincularPorNome(insumoId, nome) {
+  for (const p of ES.produtos) {
+    if (chaveNome(p.nome) === chaveNome(nome) && !ES.fichas.some((f) => f.produto_id === p.id)) {
+      await db.from("sp_ficha_tecnica").insert({ id: uid(), produto_id: p.id, insumo_id: insumoId, quantidade: 1 });
+    }
+  }
+}
 function esRenderEstoque() {
   const baixos = ES.insumos.filter((i) => Number(i.estoque_atual) <= Number(i.estoque_minimo) && Number(i.estoque_minimo) > 0);
   $("#estoque-alerta").innerHTML = baixos.length ? `<div class="aviso">Abaixo do mínimo: ${baixos.map((i) => esc(i.nome)).join(", ")}</div>` : "";
-  $("#estoque-lista").innerHTML = ES.insumos.length ? ES.insumos.map((i) => {
+  const valorTotal = ES.insumos.reduce((soma, i) => soma + Number(i.estoque_atual) * Number(i.custo_unitario), 0);
+  const cabecalho = ES.insumos.length ? `<div class="kpi" style="margin-bottom:12px"><span class="muted small">Valor total em estoque</span><b>${esFmt(valorTotal)}</b></div>` : "";
+  $("#estoque-lista").innerHTML = ES.insumos.length ? cabecalho + ES.insumos.map((i) => {
     const baixo = Number(i.estoque_minimo) > 0 && Number(i.estoque_atual) <= Number(i.estoque_minimo);
+    const custo = Number(i.custo_unitario);
+    const valor = Number(i.estoque_atual) * custo;
+    const prod = ES.produtos.find((p) => chaveNome(p.nome) === chaveNome(i.nome));
+    const markup = prod && custo > 0 ? ((Number(prod.preco) - custo) / custo) * 100 : null;
+    const venda = prod ? `<div class="small"><b>Vendido a ${esFmt(prod.preco)}</b>${markup === null ? "" : ` · markup ${markup.toFixed(0)}%`}</div>` : "";
     return `<div class="linha ${baixo ? "alerta" : ""}">
       <div class="info"><div class="titulo">${esc(i.nome)}</div>
-        <div class="small muted">${esc(i.categoria || "")} · custo ${esFmt(i.custo_unitario)} por ${esc(i.unidade)}</div></div>
+        <div class="small muted">${esc(i.categoria || "")} · custo ${esFmt(custo)} por ${esc(i.unidade)} · em estoque ${esFmt(valor)}</div>
+        ${venda}</div>
       <div class="acoes"><span class="preco">${Number(i.estoque_atual)} ${esc(i.unidade)}</span>
         <button class="link" data-mov="${esc(i.id)}" type="button">Movimentar</button></div></div>`;
   }).join("") : '<p class="muted">Nenhum insumo. Cadastre carne, pão, açaí, chopp, bebidas, embalagens...</p>';
@@ -164,6 +182,9 @@ async function esNovoInsumo(form) {
   });
   if (error) return esMsg("#estoque-msg", "Erro: " + error.message);
   if (inicial > 0) await db.from("sp_movimentos_estoque").insert({ id: uid(), insumo_id: id, tipo: "entrada", quantidade: inicial, custo_unitario: custo, observacao: "Estoque inicial" });
+  await esCarregar();
+  await esVincularPorNome(id, nome);
+  await esRecalcularCustos();
   form.reset();
   esMsg("#estoque-msg", "Insumo cadastrado.");
   await esCarregar();
@@ -254,7 +275,7 @@ async function esEnviarPedido() {
   const itens = Object.entries(ESP.itens).map(([id, it]) => ({ produto_id: id, nome: it.nome, qtd: it.qtd, preco: it.preco, custo: custoDoProduto(id) }));
   const pedido = {
     id: uid(), tipo: ESP.tipo, mesa: ESP.tipo === "mesa" ? f.elements.mesa.value.trim() || null : null,
-    cliente_id: cliente ? cliente.id : null, cliente_nome: ESP.tipo === "balcao" ? (f.elements.pessoaX.value.trim() || "Pessoa X") : (cliente ? cliente.nome : null),
+    cliente_id: cliente ? cliente.id : null, cliente_nome: ESP.tipo === "balcao" ? (f.elements.pessoaX.value.trim() || "Retirada") : (cliente ? cliente.nome : null),
     endereco, bairro, taxa_entrega: round2(taxa), itens, subtotal, total: round2(subtotal + taxa), status: "aberto",
     observacao: f.elements.obs.value.trim() || null,
   };
@@ -280,7 +301,7 @@ function comandaTexto(p, via) {
     "ESPETINHOS DO SEU PAULO",
     traco,
     linha2(`PEDIDO ${p.id.slice(0, 6).toUpperCase()}`, hora),
-    p.tipo === "mesa" ? `MESA ${p.mesa || "-"}` : p.tipo === "entrega" ? "ENTREGA" : `PESSOA X: ${p.cliente_nome || ""}`,
+    p.tipo === "mesa" ? `MESA ${p.mesa || "-"}` : p.tipo === "entrega" ? "ENTREGA" : `RETIRADA: ${p.cliente_nome || ""}`,
   ];
   if (p.tipo === "entrega") {
     cab.push(`Cliente: ${p.cliente_nome || ""}`);
@@ -336,7 +357,7 @@ function esRenderPedidos() {
   $("#pedidos-resumo").innerHTML = `<div class="kpi"><span class="muted small">Pedidos</span><b>${lista.length}</b></div>
     <div class="kpi"><span class="muted small">Recebido</span><b>${esFmt(totalPago)}</b></div>`;
   $("#pedidos-lista").innerHTML = lista.length ? lista.map((p) => {
-    const rotulo = p.tipo === "mesa" ? `Mesa ${p.mesa || "-"}` : p.tipo === "entrega" ? `Entrega · ${p.cliente_nome || ""}` : `Pessoa X · ${p.cliente_nome || ""}`;
+    const rotulo = p.tipo === "mesa" ? `Mesa ${p.mesa || "-"}` : p.tipo === "entrega" ? `Entrega · ${p.cliente_nome || ""}` : `Retirada · ${p.cliente_nome || ""}`;
     return `<div class="linha pedido ${p.status}">
       <div class="info"><div class="titulo">${esc(rotulo)}</div>
         <div class="small muted">${esc((p.itens || []).map((i) => i.qtd + "x " + i.nome).join(", "))}</div>
@@ -367,7 +388,7 @@ const DOC_CSS = `
 const docHTML = (titulo, corpo) => `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>${DOC_CSS}</style></head><body>${corpo}</body></html>`;
 
 function esDocumentoRecibo(p) {
-  const rotulo = p.tipo === "mesa" ? `MESA ${p.mesa || "-"}` : p.tipo === "entrega" ? "ENTREGA" : `PESSOA X: ${p.cliente_nome || ""}`;
+  const rotulo = p.tipo === "mesa" ? `MESA ${p.mesa || "-"}` : p.tipo === "entrega" ? "ENTREGA" : `RETIRADA: ${p.cliente_nome || ""}`;
   const data = new Date(p.criado_em || Date.now());
   const itens = (p.itens || []).map((i) => `<tr><td>${i.qtd}x ${esc(i.nome)}</td><td class="r">${esFmt(i.qtd * i.preco)}</td></tr>`).join("");
   const entrega = p.tipo === "entrega" ? `<div>Cliente: ${esc(p.cliente_nome || "")}</div>${p.endereco ? `<div>End.: ${esc(p.endereco)}</div>` : ""}${p.bairro ? `<div>Bairro: ${esc(p.bairro)}</div>` : ""}` : "";

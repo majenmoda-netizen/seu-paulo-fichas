@@ -27,11 +27,11 @@
       <div class="filtro-ped">
         <button class="chip-btn active" data-tipo="mesa" type="button">Mesa</button>
         <button class="chip-btn" data-tipo="entrega" type="button">Entrega</button>
-        <button class="chip-btn" data-tipo="balcao" type="button">Pessoa X</button>
+        <button class="chip-btn" data-tipo="balcao" type="button">Retirada</button>
       </div>
       <form id="pedido-form" class="card form-grid" onsubmit="return false">
         <div id="campo-mesa"><label>Número da mesa<input type="text" name="mesa" placeholder="Ex.: 5"></label></div>
-        <div id="campo-balcao" hidden><label>Nome (opcional)<input type="text" name="pessoaX" placeholder="Ex.: Pessoa X"></label></div>
+        <div id="campo-balcao" hidden><label>Nome de quem vai retirar<input type="text" name="pessoaX" placeholder="Ex.: João"></label></div>
         <div id="campo-entrega" hidden>
           <label>Cliente
             <select id="pedido-cliente"></select>
@@ -177,6 +177,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="config.js?v=1"></script>
   <script src="app.js?v=7"></script>
-  <script src="espetinhos.js?v=6"></script>
+  <script src="espetinhos.js?v=8"></script>
 </body>
 </html>

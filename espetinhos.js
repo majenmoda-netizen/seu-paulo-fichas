@@ -232,8 +232,18 @@ async function esEnviarPedido() {
     else {
       const nome = f.elements.clienteNome.value.trim();
       if (!nome) return esMsg("#pedido-msg", "Informe o nome do cliente.");
+      // Não cadastra o mesmo telefone duas vezes: confere no banco antes de finalizar.
+      const soDigitos = (t) => String(t || "").replace(/\D/g, "");
+      const tel = soDigitos(f.elements.telefone.value);
+      if (tel) {
+        const { data: existentes, error: erroBusca } = await db.from("sp_clientes").select("id,nome,telefone");
+        if (erroBusca) return esMsg("#pedido-msg", "Não consegui conferir o telefone: " + erroBusca.message);
+        const dup = existentes.find((c) => soDigitos(c.telefone) === tel);
+        if (dup) return esMsg("#pedido-msg", `Este telefone já está cadastrado para ${dup.nome}. Escolha esse cliente na lista "Cliente".`);
+      }
       cliente = { id: uid(), nome, telefone: f.elements.telefone.value.trim() || null, endereco: f.elements.endereco.value.trim() || null, bairro: $("#pedido-bairro").value || null };
-      await db.from("sp_clientes").insert(cliente);
+      const { error: erroCliente } = await db.from("sp_clientes").insert(cliente);
+      if (erroCliente) return esMsg("#pedido-msg", "Erro ao cadastrar o cliente: " + erroCliente.message);
     }
     bairro = $("#pedido-bairro").value || (cliente && cliente.bairro);
     if (!bairro) return esMsg("#pedido-msg", "Escolha o bairro para calcular a taxa.");

@@ -345,7 +345,6 @@ function esRenderPedidos() {
         ${p.status === "aberto" ? `<button class="btn" data-pago="${esc(p.id)}" type="button">Receber</button>` : ""}
         ${p.status === "aberto" && p.tipo === "entrega" ? `<button class="link" data-entregue="${esc(p.id)}" type="button">Entregue</button>` : ""}
         <button class="link" data-imprimir-recibo="${esc(p.id)}" type="button">Imprimir recibo</button>
-        <button class="link" data-imprimir-cozinha="${esc(p.id)}" type="button">Imprimir cozinha</button>
         <button class="link" data-reimprimir="${esc(p.id)}" type="button">Reimprimir</button></div></div>`;
   }).join("") : '<p class="muted">Nenhum pedido nesta visão.</p>';
 }
@@ -390,31 +389,11 @@ function esDocumentoRecibo(p) {
     <div class="c">Obrigado e volte sempre!</div>`);
 }
 
-function esDocumentoCozinha(p) {
-  const destaque = p.tipo === "mesa" ? `MESA ${p.mesa || "-"}` : p.tipo === "entrega" ? "ENTREGA" : "PESSOA X";
-  const hora = new Date(p.criado_em || Date.now()).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-  const itens = (p.itens || []).map((i) => `<div class="b" style="font-size:16px;padding:3px 0">${i.qtd}x ${esc(i.nome)}</div>`).join("");
-  const cliente = p.tipo === "entrega" || p.tipo === "balcao" ? `<div class="b">${esc(p.cliente_nome || "")}</div>` : "";
-  return docHTML("Cozinha " + p.id.slice(0, 6), `
-    <div class="grande">${esc(destaque)}</div>
-    <div class="row"><span>Pedido ${esc(p.id.slice(0, 6).toUpperCase())}</span><span>${hora}</span></div>
-    ${cliente}
-    <div class="linha"></div>
-    ${itens}
-    <div class="linha"></div>
-    ${p.observacao ? `<div class="obs">OBS.: ${esc(p.observacao)}</div>` : ""}`);
-}
-
-// Abre a versão para impressão e chama a janela de impressão do computador.
-function esImprimirDoc(p, tipo) {
-  const html = tipo === "cozinha" ? esDocumentoCozinha(p) : esDocumentoRecibo(p);
-  const w = window.open("", "_blank", "width=400,height=600");
-  if (!w) return esMsg("#pedido-msg", "O navegador bloqueou a janela de impressão. Permita pop-ups para este site.");
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-  // Uma única chamada de impressão, depois que o conteúdo foi escrito na janela.
-  setTimeout(() => { w.focus(); w.print(); }, 400);
+// Imprime o recibo sem abrir janela nova (o navegador bloqueia pop-ups): usa uma área de impressão na própria página.
+function esImprimirDoc(p) {
+  const area = document.getElementById("print-area");
+  area.innerHTML = `<style>${DOC_CSS}</style>` + esDocumentoRecibo(p).replace(/^[\s\S]*?<body>/, "").replace(/<\/body>[\s\S]*$/, "");
+  setTimeout(() => window.print(), 50);
 }
 
 // ---------- Renderização geral e eventos ----------
@@ -469,8 +448,7 @@ function esLigarEventos() {
     const t = e.target;
     if (t.dataset.pago) { const forma = prompt("Forma de pagamento: Dinheiro, Pix ou Cartão", "Dinheiro"); if (forma) esMudarStatus(t.dataset.pago, "pago", forma); }
     if (t.dataset.entregue) esMudarStatus(t.dataset.entregue, "entregue");
-    if (t.dataset.imprimirRecibo) { const p = ES.pedidos.find((x) => x.id === t.dataset.imprimirRecibo); if (p) esImprimirDoc(p, "recibo"); }
-    if (t.dataset.imprimirCozinha) { const p = ES.pedidos.find((x) => x.id === t.dataset.imprimirCozinha); if (p) esImprimirDoc(p, "cozinha"); }
+    if (t.dataset.imprimirRecibo) { const p = ES.pedidos.find((x) => x.id === t.dataset.imprimirRecibo); if (p) esImprimirDoc(p); }
     if (t.dataset.reimprimir) { const p = ES.pedidos.find((x) => x.id === t.dataset.reimprimir); if (p) esImprimir(p).then(() => esMsg("#pedido-msg", "Comandas reenviadas para impressão.")); }
   });
   document.querySelectorAll("[data-filtro-ped]").forEach((b) => b.addEventListener("click", () => { ES.filtroPedidos = b.dataset.filtroPed; esRenderPedidos(); }));

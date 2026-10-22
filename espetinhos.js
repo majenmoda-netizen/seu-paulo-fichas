@@ -344,8 +344,77 @@ function esRenderPedidos() {
       <div class="acoes"><span class="preco">${esFmt(p.total)}</span>
         ${p.status === "aberto" ? `<button class="btn" data-pago="${esc(p.id)}" type="button">Receber</button>` : ""}
         ${p.status === "aberto" && p.tipo === "entrega" ? `<button class="link" data-entregue="${esc(p.id)}" type="button">Entregue</button>` : ""}
+        <button class="link" data-imprimir-recibo="${esc(p.id)}" type="button">Imprimir recibo</button>
+        <button class="link" data-imprimir-cozinha="${esc(p.id)}" type="button">Imprimir cozinha</button>
         <button class="link" data-reimprimir="${esc(p.id)}" type="button">Reimprimir</button></div></div>`;
   }).join("") : '<p class="muted">Nenhum pedido nesta visão.</p>';
+}
+
+// ---------- Impressão (preto e branco, 80 mm). O computador oferece "Salvar como PDF" na janela de impressão. ----------
+const DOC_CSS = `
+  @page { size: 80mm auto; margin: 0; }
+  body { width: 72mm; margin: 0 auto; padding: 4mm 0; font-family: Arial, Helvetica, sans-serif; color: #000; font-size: 12px; }
+  .c { text-align: center; }
+  .b { font-weight: 700; }
+  .grande { font-size: 22px; font-weight: 900; border: 2px solid #000; text-align: center; padding: 4px 0; margin-bottom: 6px; }
+  .linha { border-top: 1px dashed #000; margin: 6px 0; }
+  .row { display: flex; justify-content: space-between; gap: 6px; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 2px 0; vertical-align: top; }
+  td.r { text-align: right; white-space: nowrap; }
+  .total { font-size: 15px; font-weight: 900; border-top: 2px solid #000; margin-top: 4px; padding-top: 4px; display: flex; justify-content: space-between; }
+  .obs { font-style: italic; margin-top: 4px; }
+`;
+const docHTML = (titulo, corpo) => `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>${DOC_CSS}</style></head><body>${corpo}</body></html>`;
+
+function esDocumentoRecibo(p) {
+  const rotulo = p.tipo === "mesa" ? `MESA ${p.mesa || "-"}` : p.tipo === "entrega" ? "ENTREGA" : `PESSOA X: ${p.cliente_nome || ""}`;
+  const data = new Date(p.criado_em || Date.now());
+  const itens = (p.itens || []).map((i) => `<tr><td>${i.qtd}x ${esc(i.nome)}</td><td class="r">${esFmt(i.qtd * i.preco)}</td></tr>`).join("");
+  const entrega = p.tipo === "entrega" ? `<div>Cliente: ${esc(p.cliente_nome || "")}</div>${p.endereco ? `<div>End.: ${esc(p.endereco)}</div>` : ""}${p.bairro ? `<div>Bairro: ${esc(p.bairro)}</div>` : ""}` : "";
+  return docHTML("Recibo " + p.id.slice(0, 6), `
+    <div class="c b">ESPETINHOS DO SEU PAULO</div>
+    <div class="c">RECIBO DE PEDIDO</div>
+    <div class="linha"></div>
+    <div class="row"><span>Pedido ${esc(p.id.slice(0, 6).toUpperCase())}</span><span>${data.toLocaleDateString("pt-BR")} ${data.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span></div>
+    <div class="b">${esc(rotulo)}</div>
+    ${entrega}
+    <div class="linha"></div>
+    <table>${itens}</table>
+    <div class="linha"></div>
+    ${p.taxa_entrega ? `<div class="row"><span>Taxa de entrega</span><span>${esFmt(p.taxa_entrega)}</span></div>` : ""}
+    <div class="total"><span>TOTAL</span><span>${esFmt(p.total)}</span></div>
+    ${p.forma_pagamento ? `<div class="c">Pagamento: ${esc(p.forma_pagamento)}</div>` : ""}
+    ${p.observacao ? `<div class="obs">Obs.: ${esc(p.observacao)}</div>` : ""}
+    <div class="linha"></div>
+    <div class="c">Obrigado e volte sempre!</div>`);
+}
+
+function esDocumentoCozinha(p) {
+  const destaque = p.tipo === "mesa" ? `MESA ${p.mesa || "-"}` : p.tipo === "entrega" ? "ENTREGA" : "PESSOA X";
+  const hora = new Date(p.criado_em || Date.now()).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const itens = (p.itens || []).map((i) => `<div class="b" style="font-size:16px;padding:3px 0">${i.qtd}x ${esc(i.nome)}</div>`).join("");
+  const cliente = p.tipo === "entrega" || p.tipo === "balcao" ? `<div class="b">${esc(p.cliente_nome || "")}</div>` : "";
+  return docHTML("Cozinha " + p.id.slice(0, 6), `
+    <div class="grande">${esc(destaque)}</div>
+    <div class="row"><span>Pedido ${esc(p.id.slice(0, 6).toUpperCase())}</span><span>${hora}</span></div>
+    ${cliente}
+    <div class="linha"></div>
+    ${itens}
+    <div class="linha"></div>
+    ${p.observacao ? `<div class="obs">OBS.: ${esc(p.observacao)}</div>` : ""}`);
+}
+
+// Abre a versão para impressão e chama a janela de impressão do computador.
+function esImprimirDoc(p, tipo) {
+  const html = tipo === "cozinha" ? esDocumentoCozinha(p) : esDocumentoRecibo(p);
+  const w = window.open("", "_blank", "width=400,height=600");
+  if (!w) return esMsg("#pedido-msg", "O navegador bloqueou a janela de impressão. Permita pop-ups para este site.");
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  // Uma única chamada de impressão, depois que o conteúdo foi escrito na janela.
+  setTimeout(() => { w.focus(); w.print(); }, 400);
 }
 
 // ---------- Renderização geral e eventos ----------
@@ -400,6 +469,8 @@ function esLigarEventos() {
     const t = e.target;
     if (t.dataset.pago) { const forma = prompt("Forma de pagamento: Dinheiro, Pix ou Cartão", "Dinheiro"); if (forma) esMudarStatus(t.dataset.pago, "pago", forma); }
     if (t.dataset.entregue) esMudarStatus(t.dataset.entregue, "entregue");
+    if (t.dataset.imprimirRecibo) { const p = ES.pedidos.find((x) => x.id === t.dataset.imprimirRecibo); if (p) esImprimirDoc(p, "recibo"); }
+    if (t.dataset.imprimirCozinha) { const p = ES.pedidos.find((x) => x.id === t.dataset.imprimirCozinha); if (p) esImprimirDoc(p, "cozinha"); }
     if (t.dataset.reimprimir) { const p = ES.pedidos.find((x) => x.id === t.dataset.reimprimir); if (p) esImprimir(p).then(() => esMsg("#pedido-msg", "Comandas reenviadas para impressão.")); }
   });
   document.querySelectorAll("[data-filtro-ped]").forEach((b) => b.addEventListener("click", () => { ES.filtroPedidos = b.dataset.filtroPed; esRenderPedidos(); }));

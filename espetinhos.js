@@ -446,7 +446,11 @@ function esAcoesPedido(p) {
   const a = ES.acao && ES.acao.id === p.id ? ES.acao.tipo : null;
   const id = esc(p.id);
   if (a === "receber") return `<span class="small muted">Forma de pagamento:</span>
-    ${["Dinheiro", "Pix", "Cartão"].map((f) => `<button class="btn" data-pagar="${id}" data-forma="${f}" type="button">${f}</button>`).join("")}
+    ${["Dinheiro", "Pix"].map((f) => `<button class="btn" data-pagar="${id}" data-forma="${f}" type="button">${f}</button>`).join("")}
+    <button class="btn" data-cartao="${id}" type="button">Cartão</button>
+    <button class="link" data-voltar="1" type="button">Voltar</button>`;
+  if (a === "cartao") return `<span class="small muted">Cartão:</span>
+    ${["Débito", "Crédito"].map((f) => `<button class="btn" data-pagar="${id}" data-forma="Cartão ${f}" type="button">${f}</button>`).join("")}
     <button class="link" data-voltar="1" type="button">Voltar</button>`;
   if (a === "cancelar") return `<span class="small muted">Cancelar este pedido e devolver o estoque?</span>
     <button class="btn" data-cancelar-ok="${id}" type="button">Sim, cancelar</button><button class="link" data-voltar="1" type="button">Voltar</button>`;
@@ -631,6 +635,7 @@ function esLigarEventos() {
     const t = e.target;
     if (t.dataset.pago) { ES.acao = { id: t.dataset.pago, tipo: "receber" }; esRenderPedidos(); }
     if (t.dataset.cancelar) { ES.acao = { id: t.dataset.cancelar, tipo: "cancelar" }; esRenderPedidos(); }
+    if (t.dataset.cartao) { ES.acao = { id: t.dataset.cartao, tipo: "cartao" }; esRenderPedidos(); }
     if (t.dataset.voltar) { ES.acao = null; esRenderPedidos(); }
     if (t.dataset.pagar) esMudarStatus(t.dataset.pagar, "pago", t.dataset.forma);
     if (t.dataset.cancelarOk) esMudarStatus(t.dataset.cancelarOk, "cancelado");

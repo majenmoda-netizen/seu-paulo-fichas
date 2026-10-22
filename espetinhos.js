@@ -408,8 +408,7 @@ function esRenderPedidos() {
       <div class="acoes"><span class="preco">${esFmt(p.total)}</span>
         ${p.status === "aberto" ? `<button class="btn" data-pago="${esc(p.id)}" type="button">Receber</button>` : ""}
         ${p.status === "aberto" && p.tipo === "entrega" ? `<button class="link" data-entregue="${esc(p.id)}" type="button">Entregue</button>` : ""}
-        <button class="link" data-imprimir-recibo="${esc(p.id)}" type="button">Imprimir recibo</button>
-        <button class="link" data-reimprimir="${esc(p.id)}" type="button">Reimprimir</button></div></div>`;
+        <button class="link" data-imprimir-recibo="${esc(p.id)}" type="button">Imprimir recibo</button></div></div>`;
   }).join("") : '<p class="muted">Nenhum pedido nesta visão.</p>';
 }
 

@@ -413,50 +413,56 @@ function esRenderPedidos() {
   }).join("") : '<p class="muted">Nenhum pedido nesta visão.</p>';
 }
 
-// ---------- Impressão (preto e branco, 80 mm). O computador oferece "Salvar como PDF" na janela de impressão. ----------
-const DOC_CSS = `
-  @page { size: 80mm auto; margin: 0; }
-  body { width: 72mm; margin: 0 auto; padding: 4mm 0; font-family: Arial, Helvetica, sans-serif; color: #000; font-size: 12px; }
-  .c { text-align: center; }
-  .b { font-weight: 700; }
-  .grande { font-size: 22px; font-weight: 900; border: 2px solid #000; text-align: center; padding: 4px 0; margin-bottom: 6px; }
-  .linha { border-top: 1px dashed #000; margin: 6px 0; }
-  .row { display: flex; justify-content: space-between; gap: 6px; }
-  table { width: 100%; border-collapse: collapse; }
-  td { padding: 2px 0; vertical-align: top; }
-  td.r { text-align: right; white-space: nowrap; }
-  .total { font-size: 15px; font-weight: 900; border-top: 2px solid #000; margin-top: 4px; padding-top: 4px; display: flex; justify-content: space-between; }
-  .obs { font-style: italic; margin-top: 4px; }
+// ---------- Impressão do recibo: bobina de 80 mm, preto e branco, centralizado ----------
+// Classes com prefixo "rc-" para não se misturar com o CSS do app.
+const RC_CSS = `
+  #print-area { font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; font-size: 12px; width: 72mm; padding: 3mm 0; margin: 0 auto; }
+  #print-area .rc-c { text-align: center; }
+  #print-area .rc-b { font-weight: 700; }
+  #print-area .rc-tit { text-align: center; font-size: 15px; font-weight: 900; }
+  #print-area .rc-sep { border-top: 1px dashed #000; margin: 5px 0; height: 0; }
+  #print-area .rc-row { display: flex; justify-content: space-between; gap: 6px; }
+  #print-area table.rc-tab { width: 100%; border-collapse: collapse; }
+  #print-area table.rc-tab td { padding: 2px 0; vertical-align: top; }
+  #print-area td.rc-r { text-align: right; white-space: nowrap; }
+  #print-area .rc-tot { display: flex; justify-content: space-between; font-size: 15px; font-weight: 900; border-top: 2px solid #000; margin-top: 4px; padding-top: 4px; }
+  #print-area .rc-obs { font-style: italic; margin-top: 4px; text-align: center; }
+  @media print {
+    body * { visibility: hidden !important; }
+    #print-area, #print-area * { visibility: visible !important; }
+    #print-area { display: block !important; position: absolute; top: 0; left: 0; right: 0; margin: 0 auto; width: 72mm; }
+  }
 `;
-const docHTML = (titulo, corpo) => `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>${DOC_CSS}</style></head><body>${corpo}</body></html>`;
 
 function esDocumentoRecibo(p) {
   const rotulo = p.tipo === "mesa" ? `MESA ${p.mesa || "-"}` : p.tipo === "entrega" ? "ENTREGA" : `RETIRADA: ${p.cliente_nome || ""}`;
   const data = new Date(p.criado_em || Date.now());
-  const itens = (p.itens || []).map((i) => `<tr><td>${i.qtd}x ${esc(i.nome)}</td><td class="r">${esFmt(i.qtd * i.preco)}</td></tr>`).join("");
-  const entrega = p.tipo === "entrega" ? `<div>Cliente: ${esc(p.cliente_nome || "")}</div>${p.endereco ? `<div>End.: ${esc(p.endereco)}</div>` : ""}${p.bairro ? `<div>Bairro: ${esc(p.bairro)}</div>` : ""}` : "";
-  return docHTML("Recibo " + p.id.slice(0, 6), `
-    <div class="c b">ESPETINHOS DO SEU PAULO</div>
-    <div class="c">RECIBO DE PEDIDO</div>
-    <div class="linha"></div>
-    <div class="row"><span>Pedido ${esc(p.id.slice(0, 6).toUpperCase())}</span><span>${data.toLocaleDateString("pt-BR")} ${data.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span></div>
-    <div class="b">${esc(rotulo)}</div>
+  const itens = (p.itens || []).map((i) => `<tr><td>${i.qtd}x ${esc(i.nome)}</td><td class="rc-r">${esFmt(i.qtd * i.preco)}</td></tr>`).join("");
+  const entrega = p.tipo === "entrega" ? `<div class="rc-c">${esc(p.cliente_nome || "")}</div>${p.endereco ? `<div class="rc-c">${esc(p.endereco)}</div>` : ""}${p.bairro ? `<div class="rc-c">${esc(p.bairro)}</div>` : ""}` : "";
+  return `
+    <div class="rc-tit">ESPETINHOS DO SEU PAULO</div>
+    <div class="rc-c">RECIBO DE PEDIDO</div>
+    <div class="rc-sep"></div>
+    <div class="rc-row"><span>Pedido ${esc(p.id.slice(0, 6).toUpperCase())}</span><span>${data.toLocaleDateString("pt-BR")} ${data.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span></div>
+    <div class="rc-c rc-b">${esc(rotulo)}</div>
     ${entrega}
-    <div class="linha"></div>
-    <table>${itens}</table>
-    <div class="linha"></div>
-    ${p.taxa_entrega ? `<div class="row"><span>Taxa de entrega</span><span>${esFmt(p.taxa_entrega)}</span></div>` : ""}
-    <div class="total"><span>TOTAL</span><span>${esFmt(p.total)}</span></div>
-    ${p.forma_pagamento ? `<div class="c">Pagamento: ${esc(p.forma_pagamento)}</div>` : ""}
-    ${p.observacao ? `<div class="obs">Obs.: ${esc(p.observacao)}</div>` : ""}
-    <div class="linha"></div>
-    <div class="c">Obrigado e volte sempre!</div>`);
+    <div class="rc-sep"></div>
+    <table class="rc-tab">${itens}</table>
+    <div class="rc-sep"></div>
+    ${p.taxa_entrega ? `<div class="rc-row"><span>Taxa de entrega</span><span>${esFmt(p.taxa_entrega)}</span></div>` : ""}
+    <div class="rc-tot"><span>TOTAL</span><span>${esFmt(p.total)}</span></div>
+    ${p.forma_pagamento ? `<div class="rc-c">Pagamento: ${esc(p.forma_pagamento)}</div>` : ""}
+    ${p.observacao ? `<div class="rc-obs">Obs.: ${esc(p.observacao)}</div>` : ""}
+    <div class="rc-sep"></div>
+    <div class="rc-c">Obrigado e volte sempre!</div>`;
 }
 
-// Imprime o recibo sem abrir janela nova (o navegador bloqueia pop-ups): usa uma área de impressão na própria página.
+// Imprime sem abrir janela nova: usa a área de impressão da própria página.
+// A altura da bobina acompanha o tamanho do pedido, para não gastar papel à toa.
 function esImprimirDoc(p) {
   const area = document.getElementById("print-area");
-  area.innerHTML = `<style>${DOC_CSS}</style>` + esDocumentoRecibo(p).replace(/^[\s\S]*?<body>/, "").replace(/<\/body>[\s\S]*$/, "");
+  const altura = Math.max(60, 50 + (p.itens || []).length * 9 + (p.tipo === "entrega" ? 28 : 0) + (p.observacao ? 8 : 0));
+  area.innerHTML = `<style>@page { size: 80mm ${altura}mm; margin: 0; }${RC_CSS}</style>` + esDocumentoRecibo(p);
   setTimeout(() => window.print(), 50);
 }
 

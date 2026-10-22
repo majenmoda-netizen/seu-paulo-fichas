@@ -75,14 +75,15 @@
       <p class="muted small">Cadastre carne, pão, açaí, chopp, bebidas e embalagens. A venda dá baixa automática nos insumos da ficha técnica de cada produto.</p>
       <div id="estoque-alerta"></div>
       <form id="estoque-form" class="card form-grid" onsubmit="return false">
-        <h2>Novo insumo</h2>
+        <input type="hidden" name="id">
+        <h2 id="estoque-titulo">Novo insumo</h2>
         <label>Nome<input type="text" name="nome" required placeholder="Ex.: Pão de hambúrguer"></label>
         <label>Unidade<select name="unidade"><option>un</option><option>kg</option><option>g</option><option>l</option><option>ml</option><option>pct</option></select></label>
         <label>Categoria<input type="text" name="categoria" placeholder="Carne, pão, bebida, açaí..."></label>
         <label>Custo por unidade (R$)<input type="text" name="custo" inputmode="decimal" placeholder="Ex.: 1,20"></label>
         <label>Estoque inicial<input type="text" name="inicial" inputmode="decimal" placeholder="Ex.: 100"></label>
         <label>Estoque mínimo (alerta)<input type="text" name="minimo" inputmode="decimal" placeholder="Ex.: 20"></label>
-        <div class="actions"><button type="button" class="btn" id="estoque-salvar">Cadastrar insumo</button><span id="estoque-msg" class="muted small"></span></div>
+        <div class="actions"><button type="button" class="btn" id="estoque-salvar">Cadastrar insumo</button><button type="button" class="link" id="estoque-cancelar" hidden>Cancelar edição</button><span id="estoque-msg" class="muted small"></span></div>
       </form>
       <div id="estoque-lista"></div>
     </section>
@@ -177,6 +178,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="config.js?v=1"></script>
   <script src="app.js?v=7"></script>
-  <script src="espetinhos.js?v=8"></script>
+  <script src="espetinhos.js?v=9"></script>
 </body>
 </html>

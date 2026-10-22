@@ -166,15 +166,58 @@ function esRenderEstoque() {
         <div class="small muted">${esc(i.categoria || "")} · custo ${esFmt(custo)} por ${esc(i.unidade)} · em estoque ${esFmt(valor)}</div>
         ${venda}</div>
       <div class="acoes"><span class="preco">${Number(i.estoque_atual)} ${esc(i.unidade)}</span>
+        <button class="link" data-editar-insumo="${esc(i.id)}" type="button">Editar</button>
         <button class="link" data-mov="${esc(i.id)}" type="button">Movimentar</button></div></div>`;
   }).join("") : '<p class="muted">Nenhum insumo. Cadastre carne, pão, açaí, chopp, bebidas, embalagens...</p>';
 }
 
+// Preenche o formulário de cima com os dados do insumo, para editar.
+function esEditarInsumo(id) {
+  const i = ES.insumos.find((x) => x.id === id);
+  const f = $("#estoque-form");
+  f.elements.id.value = i.id;
+  f.elements.nome.value = i.nome;
+  f.elements.unidade.value = i.unidade;
+  f.elements.categoria.value = i.categoria || "";
+  f.elements.custo.value = String(Number(i.custo_unitario)).replace(".", ",");
+  f.elements.inicial.value = "";
+  f.elements.minimo.value = String(Number(i.estoque_minimo)).replace(".", ",");
+  $("#estoque-titulo").textContent = "Editar insumo";
+  $("#estoque-salvar").textContent = "Salvar alterações";
+  $("#estoque-cancelar").hidden = false;
+  $("#estoque-msg").textContent = "Para mudar a quantidade em estoque, use Movimentar.";
+  f.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function esCancelarEdicaoInsumo() {
+  const f = $("#estoque-form");
+  f.reset();
+  f.elements.id.value = "";
+  $("#estoque-titulo").textContent = "Novo insumo";
+  $("#estoque-salvar").textContent = "Cadastrar insumo";
+  $("#estoque-cancelar").hidden = true;
+  $("#estoque-msg").textContent = "";
+}
+
 async function esNovoInsumo(form) {
+  const editando = form.elements.id.value;
   const nome = form.nome.value.trim();
   const custo = esNum(form.custo.value) || 0;
   const inicial = esNum(form.inicial.value) || 0;
   if (!nome) return esMsg("#estoque-msg", "Informe o nome.");
+  if (editando) {
+    const { error: erroEdicao } = await db.from("sp_insumos").update({
+      nome, unidade: form.unidade.value, categoria: form.categoria.value.trim() || null,
+      custo_unitario: custo, estoque_minimo: esNum(form.minimo.value) || 0, atualizado_em: new Date().toISOString(),
+    }).eq("id", editando);
+    if (erroEdicao) return esMsg("#estoque-msg", "Erro: " + erroEdicao.message);
+    await esCarregar();
+    await esVincularPorNome(editando, nome);
+    await esRecalcularCustos();
+    esCancelarEdicaoInsumo();
+    esMsg("#estoque-msg", "Insumo atualizado.");
+    return esCarregar();
+  }
   const id = uid();
   const { error } = await db.from("sp_insumos").insert({
     id, nome, unidade: form.unidade.value, categoria: form.categoria.value.trim() || null,
@@ -436,7 +479,9 @@ function esLigarEventos() {
     if (e.target.id === "ficha-fechar") $("#ficha-tecnica-box").hidden = true;
   });
   $("#estoque-salvar").addEventListener("click", () => esNovoInsumo($("#estoque-form")));
+  $("#estoque-cancelar").addEventListener("click", () => esCancelarEdicaoInsumo());
   $("#estoque-lista").addEventListener("click", (e) => {
+    if (e.target.dataset.editarInsumo) return esEditarInsumo(e.target.dataset.editarInsumo);
     const id = e.target.dataset.mov; if (!id) return;
     const insumo = ES.insumos.find((x) => x.id === id);
     const tipo = prompt(`${insumo.nome}: digite entrada, saida ou ajuste`, "entrada");

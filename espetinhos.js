@@ -3,7 +3,7 @@
 // Espetinhos do Seu Paulo: cardápio com markup, estoque de insumos, pedidos e comandas.
 // Usa a conexão `db` (Supabase) criada em app.js. Estes dados são online: sem internet, a tela avisa.
 
-const ES = { insumos: [], produtos: [], fichas: [], bairros: [], clientes: [], pedidos: [], filtroPedidos: "hoje" };
+const ES = { insumos: [], produtos: [], fichas: [], bairros: [], clientes: [], pedidos: [], filtroPedidos: "hoje", acao: null };
 const ESP = { itens: {}, tipo: "mesa", clienteId: null, forma: "Dinheiro" }; // pedido em montagem
 
 const esFmt = (n) => money(Number(n) || 0);
@@ -259,6 +259,30 @@ async function esMovimentar(insumoId, tipo, quantidade, custo, observacao) {
   await esCarregar();
 }
 
+// Janela própria para Movimentar (o navegador pode bloquear prompt()).
+function esDialogoMovimento(insumo) {
+  const u = esc(insumo.unidade);
+  const box = document.createElement("div");
+  box.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;z-index:1000";
+  box.innerHTML = `<form class="card form-grid" style="max-width:380px;width:100%;margin:0" onsubmit="return false">
+    <h2>Movimentar: ${esc(insumo.nome)}</h2>
+    <label>O que aconteceu?<select name="tipo"><option value="entrada">Entrada (comprei)</option><option value="saida">Saída (perda, consumo)</option><option value="ajuste">Ajuste (contei o estoque)</option></select></label>
+    <label>Quantidade (${u})<input type="text" name="qtd" inputmode="decimal" placeholder="Ex.: 30"></label>
+    <label data-total>Valor total pago (R$), opcional<input type="text" name="total" inputmode="decimal" placeholder="Ex.: 330 — calculo o custo por ${u}"></label>
+    <div class="actions"><button type="button" class="btn" data-ok>Salvar</button><button type="button" class="link" data-fechar>Cancelar</button><span class="muted small" data-msg></span></div></form>`;
+  document.body.appendChild(box);
+  const f = box.querySelector("form");
+  f.tipo.addEventListener("change", () => { box.querySelector("[data-total]").hidden = f.tipo.value !== "entrada"; });
+  box.querySelector("[data-fechar]").addEventListener("click", () => box.remove());
+  box.querySelector("[data-ok]").addEventListener("click", async () => {
+    const qtd = esNum(f.qtd.value);
+    if (!(qtd >= 0) || f.qtd.value.trim() === "") return (box.querySelector("[data-msg]").textContent = "Informe a quantidade.");
+    const total = f.tipo.value === "entrada" ? esNum(f.total.value) || 0 : 0;
+    box.remove();
+    await esMovimentar(insumo.id, f.tipo.value, qtd, qtd > 0 ? total / qtd : 0, "");
+  });
+}
+
 // ---------- Pedidos ----------
 const esTotalPedido = () => Object.values(ESP.itens).reduce((s, it) => s + it.qtd * it.preco, 0);
 const esTaxa = () => {
@@ -334,6 +358,7 @@ async function esEnviarPedido() {
   };
   const { error } = await db.from("sp_pedidos").insert(pedido);
   if (error) return esMsg("#pedido-msg", "Erro: " + error.message);
+  await esBaixarEstoque(pedido);
   await esImprimir(pedido);
   ESP.itens = {}; ESP.clienteId = null; f.reset();
   esMsg("#pedido-msg", "Pedido enviado para a cozinha e o caixa.");
@@ -386,9 +411,20 @@ async function esMudarStatus(pedidoId, status, forma) {
   if (status === "pago") { upd.forma_pagamento = forma || "Dinheiro"; upd.fechado_em = new Date().toISOString(); }
   const { error } = await db.from("sp_pedidos").update(upd).eq("id", pedidoId);
   if (error) return alert("Erro: " + error.message);
-  // Baixa de estoque só uma vez, quando o pedido sai de "aberto" para entregue ou pago.
-  if (era === "aberto" && (status === "entregue" || status === "pago")) await esBaixarEstoque(p);
+  // A baixa acontece ao criar o pedido; cancelar devolve ao estoque o que foi baixado.
+  if (era !== "cancelado" && status === "cancelado") await esDevolverEstoque(p);
+  ES.acao = null;
   await esCarregar();
+}
+
+async function esDevolverEstoque(pedido) {
+  const { data: movs } = await db.from("sp_movimentos_estoque").select("*").eq("pedido_id", pedido.id).eq("tipo", "venda");
+  for (const m of movs || []) {
+    const { data: ins } = await db.from("sp_insumos").select("estoque_atual").eq("id", m.insumo_id).single();
+    if (!ins) continue;
+    await db.from("sp_insumos").update({ estoque_atual: Number(ins.estoque_atual) + Number(m.quantidade), atualizado_em: new Date().toISOString() }).eq("id", m.insumo_id);
+    await db.from("sp_movimentos_estoque").delete().eq("id", m.id);
+  }
 }
 
 async function esBaixarEstoque(pedido) {
@@ -397,10 +433,26 @@ async function esBaixarEstoque(pedido) {
       const insumo = ES.insumos.find((i) => i.id === f.insumo_id);
       if (!insumo) continue;
       const qtd = Number(f.quantidade) * it.qtd;
-      await db.from("sp_insumos").update({ estoque_atual: Number(insumo.estoque_atual) - qtd, atualizado_em: new Date().toISOString() }).eq("id", insumo.id);
+      insumo.estoque_atual = Number(insumo.estoque_atual) - qtd;
+      await db.from("sp_insumos").update({ estoque_atual: insumo.estoque_atual, atualizado_em: new Date().toISOString() }).eq("id", insumo.id);
       await db.from("sp_movimentos_estoque").insert({ id: uid(), insumo_id: insumo.id, tipo: "venda", quantidade: qtd, custo_unitario: Number(insumo.custo_unitario), pedido_id: pedido.id, observacao: `Pedido ${pedido.id.slice(0, 6)}` });
     }
   }
+}
+
+// Receber e Cancelar pedem a escolha na própria tela (o navegador pode bloquear caixas de diálogo).
+function esAcoesPedido(p) {
+  if (p.status !== "aberto") return "";
+  const a = ES.acao && ES.acao.id === p.id ? ES.acao.tipo : null;
+  const id = esc(p.id);
+  if (a === "receber") return `<span class="small muted">Forma de pagamento:</span>
+    ${["Dinheiro", "Pix", "Cartão"].map((f) => `<button class="btn" data-pagar="${id}" data-forma="${f}" type="button">${f}</button>`).join("")}
+    <button class="link" data-voltar="1" type="button">Voltar</button>`;
+  if (a === "cancelar") return `<span class="small muted">Cancelar este pedido e devolver o estoque?</span>
+    <button class="btn" data-cancelar-ok="${id}" type="button">Sim, cancelar</button><button class="link" data-voltar="1" type="button">Voltar</button>`;
+  return `<button class="btn" data-pago="${id}" type="button">Receber</button>
+    ${p.tipo === "entrega" ? `<button class="link" data-entregue="${id}" type="button">Entregue</button>` : ""}
+    <button class="link danger" data-cancelar="${id}" type="button">Cancelar</button>`;
 }
 
 function esRenderPedidos() {
@@ -416,8 +468,7 @@ function esRenderPedidos() {
         <div class="small muted">${esc((p.itens || []).map((i) => i.qtd + "x " + i.nome).join(", "))}</div>
         <div class="small muted">${new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} · ${esc(p.status)}</div></div>
       <div class="acoes"><span class="preco">${esFmt(p.total)}</span>
-        ${p.status === "aberto" ? `<button class="btn" data-pago="${esc(p.id)}" type="button">Receber</button>` : ""}
-        ${p.status === "aberto" && p.tipo === "entrega" ? `<button class="link" data-entregue="${esc(p.id)}" type="button">Entregue</button>` : ""}
+        ${esAcoesPedido(p)}
         <button class="link" data-imprimir-recibo="${esc(p.id)}" type="button">Imprimir recibo</button>
         <button class="link" data-baixar-pdf="${esc(p.id)}" type="button">Baixar PDF</button></div></div>`;
   }).join("") : '<p class="muted">Nenhum pedido nesta visão.</p>';
@@ -555,13 +606,7 @@ function esLigarEventos() {
   $("#estoque-lista").addEventListener("click", (e) => {
     if (e.target.dataset.editarInsumo) return esEditarInsumo(e.target.dataset.editarInsumo);
     const id = e.target.dataset.mov; if (!id) return;
-    const insumo = ES.insumos.find((x) => x.id === id);
-    const tipo = prompt(`${insumo.nome}: digite entrada, saida ou ajuste`, "entrada");
-    if (!["entrada", "saida", "ajuste"].includes(tipo)) return;
-    const qtd = esNum(prompt(tipo === "ajuste" ? `Quantidade contada (${insumo.unidade})` : `Quantidade (${insumo.unidade})`, ""));
-    if (!(qtd >= 0)) return;
-    const custo = tipo === "entrada" ? (qtd > 0 ? (esNum(prompt(`Valor TOTAL pago nesta compra, em R$ (opcional). Calculo o custo por ${insumo.unidade} sozinho.`, "")) || 0) / qtd : 0) : 0;
-    esMovimentar(id, tipo, qtd, custo, "");
+    esDialogoMovimento(ES.insumos.find((x) => x.id === id));
   });
   document.querySelectorAll("[data-tipo]").forEach((b) => b.addEventListener("click", () => { ESP.tipo = b.dataset.tipo; esRenderPedido(); }));
   $("#pedido-produtos").addEventListener("click", (e) => {
@@ -584,7 +629,11 @@ function esLigarEventos() {
   $("#pedido-enviar").addEventListener("click", () => esEnviarPedido());
   $("#pedidos-lista").addEventListener("click", (e) => {
     const t = e.target;
-    if (t.dataset.pago) { const forma = prompt("Forma de pagamento: Dinheiro, Pix ou Cartão", "Dinheiro"); if (forma) esMudarStatus(t.dataset.pago, "pago", forma); }
+    if (t.dataset.pago) { ES.acao = { id: t.dataset.pago, tipo: "receber" }; esRenderPedidos(); }
+    if (t.dataset.cancelar) { ES.acao = { id: t.dataset.cancelar, tipo: "cancelar" }; esRenderPedidos(); }
+    if (t.dataset.voltar) { ES.acao = null; esRenderPedidos(); }
+    if (t.dataset.pagar) esMudarStatus(t.dataset.pagar, "pago", t.dataset.forma);
+    if (t.dataset.cancelarOk) esMudarStatus(t.dataset.cancelarOk, "cancelado");
     if (t.dataset.entregue) esMudarStatus(t.dataset.entregue, "entregue");
     if (t.dataset.baixarPdf) { const p = ES.pedidos.find((x) => x.id === t.dataset.baixarPdf); if (p) esBaixarPdf(p); }
     if (t.dataset.imprimirRecibo) { const p = ES.pedidos.find((x) => x.id === t.dataset.imprimirRecibo); if (p) esImprimirDoc(p); }

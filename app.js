@@ -221,6 +221,12 @@ function montarFichas(total, valores) {
 
 // Modo "por produto": cada produto tem uma ficha (cerveja = ficha de R$ 6). Se o preço não for múltiplo da
 // ficha do produto, ou se ele não tiver ficha, aquele item é montado pelo total.
+// Quantas fichas de cada valor cada unidade do produto usa (ex.: 2x R$ 10 + 1x R$ 3 para R$ 23).
+function fichasDaUnidade(p) {
+  const combo = combinacaoExata(p.preco, fichasDoProduto(p));
+  return combo ? [...combo].map(([valor, quantidade]) => ({ valor, quantidade })) : null;
+}
+
 // Fichas que o produto aceita (pode ser mais de uma).
 const fichasDoProduto = (p) => (Array.isArray(p.fichas_valores) && p.fichas_valores.length ? p.fichas_valores.map(Number) : p.ficha_valor ? [Number(p.ficha_valor)] : []);
 
@@ -369,7 +375,7 @@ function renderVender() {
           return `<div class="prod ${q ? "on" : ""}" data-add="${esc(p.id)}">
             <div class="prod-nome">${esc(p.nome)}</div>
             <div class="prod-preco">${money(p.preco)}</div>
-            ${fichasDoProduto(p).length ? `<div class="prod-ficha">fichas: ${fichasDoProduto(p).map((v) => money(v)).join(" + ")}</div>` : ""}
+            ${fichasDaUnidade(p) ? `<div class="prod-ficha">${fichasDaUnidade(p).map((f) => `${f.quantidade}× ${money(f.valor)}`).join(" + ")}</div>` : fichasDoProduto(p).length ? `<div class="prod-ficha">fichas: ${fichasDoProduto(p).map((v) => money(v)).join(" + ")}</div>` : ""}
             <div class="qtd">
               <button type="button" data-menos="${esc(p.id)}" aria-label="Tirar um">−</button>
               <strong>${q}</strong>
@@ -445,7 +451,7 @@ function renderProdutos() {
             <div class="info">
               <div class="titulo">${esc(p.nome)}</div>
               <div class="small muted">${esc(p.categoria || "")}</div>
-              ${fichasDoProduto(p).map((v) => fichaChip(v)).join("")}
+              ${(fichasDaUnidade(p) || fichasDoProduto(p).map((v) => ({ valor: v }))).map((f) => fichaChip(f.valor, f.quantidade)).join("")}
             </div>
             <div class="acoes">
               <span class="preco">${money(p.preco)}</span>

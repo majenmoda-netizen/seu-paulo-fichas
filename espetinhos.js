@@ -163,7 +163,7 @@ function esRenderEstoque() {
     const venda = prod ? `<div class="small"><b>Vendido a ${esFmt(prod.preco)}</b>${markup === null ? "" : ` · markup ${markup.toFixed(0)}%`}</div>` : "";
     return `<div class="linha ${baixo ? "alerta" : ""}">
       <div class="info"><div class="titulo">${esc(i.nome)}</div>
-        <div class="small muted">${esc(i.categoria || "")} · custo ${esFmt(custo)} por ${esc(i.unidade)} · em estoque ${esFmt(valor)}</div>
+        <div class="small muted">${esc(i.categoria || "")} · custo ${esFmt(custo)} por ${esc(i.unidade)} · ${Number(i.estoque_atual)} ${esc(i.unidade)} valem ${esFmt(valor)}</div>
         ${venda}</div>
       <div class="acoes"><span class="preco">${Number(i.estoque_atual)} ${esc(i.unidade)}</span>
         <button class="link" data-editar-insumo="${esc(i.id)}" type="button">Editar</button>
@@ -180,6 +180,7 @@ function esEditarInsumo(id) {
   f.elements.unidade.value = i.unidade;
   f.elements.categoria.value = i.categoria || "";
   f.elements.custo.value = String(Number(i.custo_unitario)).replace(".", ",");
+  f.elements.total.value = "";
   f.elements.inicial.value = "";
   f.elements.minimo.value = String(Number(i.estoque_minimo)).replace(".", ",");
   $("#estoque-titulo").textContent = "Editar insumo";
@@ -202,9 +203,16 @@ function esCancelarEdicaoInsumo() {
 async function esNovoInsumo(form) {
   const editando = form.elements.id.value;
   const nome = form.nome.value.trim();
-  const custo = esNum(form.custo.value) || 0;
+  let custo = esNum(form.custo.value) || 0;
   const inicial = esNum(form.inicial.value) || 0;
   if (!nome) return esMsg("#estoque-msg", "Informe o nome.");
+  // "Valor total pago" (ex.: barril de 30 L por R$ 330) vira custo por litro/kg/unidade.
+  const totalPago = esNum(form.total.value) || 0;
+  if (totalPago > 0) {
+    const base = editando ? Number((ES.insumos.find((x) => x.id === editando) || {}).estoque_atual) || 0 : inicial;
+    if (!(base > 0)) return esMsg("#estoque-msg", "Para usar o valor total, informe a quantidade (estoque inicial).");
+    custo = totalPago / base;
+  }
   if (editando) {
     const { error: erroEdicao } = await db.from("sp_insumos").update({
       nome, unidade: form.unidade.value, categoria: form.categoria.value.trim() || null,
@@ -550,7 +558,7 @@ function esLigarEventos() {
     if (!["entrada", "saida", "ajuste"].includes(tipo)) return;
     const qtd = esNum(prompt(tipo === "ajuste" ? `Quantidade contada (${insumo.unidade})` : `Quantidade (${insumo.unidade})`, ""));
     if (!(qtd >= 0)) return;
-    const custo = tipo === "entrada" ? esNum(prompt("Custo unitário desta compra (opcional)", String(insumo.custo_unitario).replace(".", ","))) || 0 : 0;
+    const custo = tipo === "entrada" ? (qtd > 0 ? (esNum(prompt(`Valor TOTAL pago nesta compra, em R$ (opcional). Calculo o custo por ${insumo.unidade} sozinho.`, "")) || 0) / qtd : 0) : 0;
     esMovimentar(id, tipo, qtd, custo, "");
   });
   document.querySelectorAll("[data-tipo]").forEach((b) => b.addEventListener("click", () => { ESP.tipo = b.dataset.tipo; esRenderPedido(); }));

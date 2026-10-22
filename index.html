@@ -80,7 +80,8 @@
         <label>Nome<input type="text" name="nome" required placeholder="Ex.: Pão de hambúrguer"></label>
         <label>Unidade<select name="unidade"><option>un</option><option>kg</option><option>g</option><option>l</option><option>ml</option><option>pct</option></select></label>
         <label>Categoria<input type="text" name="categoria" placeholder="Carne, pão, bebida, açaí..."></label>
-        <label>Custo por unidade (R$)<input type="text" name="custo" inputmode="decimal" placeholder="Ex.: 1,20"></label>
+        <label>Custo por unidade (R$)<input type="text" name="custo" inputmode="decimal" placeholder="Ex.: 1,20 (preço de 1 litro, 1 kg, 1 un)"></label>
+        <label>ou: valor total pago (R$)<input type="text" name="total" inputmode="decimal" placeholder="Ex.: 330 (barril inteiro) — calculo o custo por litro/kg/un"></label>
         <label>Estoque inicial<input type="text" name="inicial" inputmode="decimal" placeholder="Ex.: 100"></label>
         <label>Estoque mínimo (alerta)<input type="text" name="minimo" inputmode="decimal" placeholder="Ex.: 20"></label>
         <div class="actions"><button type="button" class="btn" id="estoque-salvar">Cadastrar insumo</button><button type="button" class="link" id="estoque-cancelar" hidden>Cancelar edição</button><span id="estoque-msg" class="muted small"></span></div>
@@ -179,6 +180,6 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="config.js?v=1"></script>
   <script src="app.js?v=7"></script>
-  <script src="espetinhos.js?v=12"></script>
+  <script src="espetinhos.js?v=13"></script>
 </body>
 </html>

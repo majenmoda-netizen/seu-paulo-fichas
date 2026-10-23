@@ -9,7 +9,7 @@
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css?v=5">
   <style>
-    .tabs { grid-template-columns: repeat(4, 1fr) !important; }
+    @media (max-width: 899px) { .tabs { grid-template-columns: repeat(4, 1fr); } }
     .subtabs { display: flex; gap: 8px; overflow-x: auto; padding: 10px 16px 0; max-width: 960px; margin: 0 auto; }
     .subtabs[hidden] { display: none; }
     .subtabs button { flex: 0 0 auto; border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 999px; padding: 8px 14px; font-size: 14px; cursor: pointer; }

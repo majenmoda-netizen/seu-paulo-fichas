@@ -576,7 +576,13 @@ function baixarCsv() {
 
 function renderTabs() {
   document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("active", s.dataset.screen === ui.tab));
-  document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === ui.tab));
+  // Menu de baixo: Pedidos, Cardápio, Estoque e Eventos (Eventos agrupa as telas de ficha).
+  const grupoEvento = ["vender", "vendas", "produtos", "fichas", "evento"];
+  const emEvento = grupoEvento.includes(ui.tab);
+  document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === "vender" ? emEvento : b.dataset.tab === ui.tab));
+  document.querySelectorAll(".subtabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === ui.tab));
+  $("#subtabs").hidden = !emEvento;
+  $("#event-bar").hidden = !emEvento;
 }
 
 function render() {
@@ -684,7 +690,7 @@ function resetFichaForm() {
 }
 
 function ligarEventos() {
-  document.querySelectorAll(".tabs button").forEach((b) =>
+  document.querySelectorAll(".tabs button, .subtabs button").forEach((b) =>
     b.addEventListener("click", () => {
       ui.tab = b.dataset.tab;
       render();

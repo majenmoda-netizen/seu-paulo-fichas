@@ -60,6 +60,8 @@
         <label>Observação<input type="text" name="obs" placeholder="Ex.: sem cebola"></label>
       </form>
       <h2 class="sub">Produtos</h2>
+      <input type="search" id="busca-pedido" placeholder="Digite o nome do produto para buscar" autocomplete="off" style="width:100%;margin-bottom:10px;padding:12px 14px;border:1px solid #e6dfd5;border-radius:10px;font:inherit;background:#fff;box-sizing:border-box">
+      <div class="chips-row" id="cat-chips"></div>
       <div id="pedido-produtos" class="grid-prod"></div>
       <div id="pedido-carrinho" class="card carrinho-ped"></div>
       <div class="actions">
@@ -80,13 +82,14 @@
         <input type="hidden" name="id">
         <h2 id="cardapio-titulo">Novo produto</h2>
         <label>Nome<input type="text" name="nome" required placeholder="Ex.: X Godinhos"></label>
-        <label>Categoria<input type="text" name="categoria" placeholder="Ex.: Lanches, Bebidas, Porções"></label>
+        <label>Categoria<input type="text" name="categoria" list="lista-categorias" placeholder="Lanches, Porções, Bebidas ou Sorvetes"><datalist id="lista-categorias"><option value="Lanches"><option value="Porções"><option value="Bebidas"><option value="Sorvetes"></datalist></label>
         <label>Preço de venda (R$)<input type="text" name="preco" inputmode="decimal" required placeholder="Ex.: 14,99"></label>
         <label>Estoque (quantidade)<input type="text" name="estoque" inputmode="decimal" placeholder="Em branco = não controla"></label>
         <label>Avisar quando chegar em<input type="text" name="minimo" inputmode="decimal" placeholder="Ex.: 5"></label>
         <div class="actions"><button type="button" class="btn" id="cardapio-salvar">Cadastrar produto</button><button type="button" class="link" id="cardapio-cancelar" hidden>Cancelar edição</button><span id="cardapio-msg" class="muted small"></span></div>
       </form>
       <div id="estoque-resumo" class="chips-row"></div>
+      <input type="search" id="busca-cardapio" placeholder="Buscar produto" autocomplete="off" style="width:100%;margin-bottom:10px;padding:12px 14px;border:1px solid #e6dfd5;border-radius:10px;font:inherit;background:#fff;box-sizing:border-box">
       <div id="cardapio-lista"></div>
     </section>
 
@@ -195,6 +198,6 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="config.js?v=1"></script>
   <script src="app.js?v=8"></script>
-  <script src="espetinhos.js?v=21"></script>
+  <script src="espetinhos.js?v=23"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
 // Usa a conexão `db` (Supabase) criada em app.js. Estes dados são online: sem internet, a tela avisa.
 
 const ES = { produtos: [], bairros: [], clientes: [], pedidos: [], filtroPedidos: "hoje", filtroTipo: "todos", acao: null, acaoProduto: null };
-const ESP = { itens: {}, tipo: "mesa", clienteId: null, forma: "Dinheiro" }; // pedido em montagem
+const ESP = { itens: {}, tipo: "mesa", clienteId: null, forma: "Dinheiro", cat: "todos" }; // pedido em montagem
 
 const esFmt = (n) => money(Number(n) || 0);
 const esNum = (v) => { const n = parseMoney(v); return Number.isFinite(n) ? n : NaN; };
@@ -32,6 +32,9 @@ async function esCarregar() {
 }
 
 // ---------- Cardápio ----------
+// Busca sem acento e sem diferenciar maiúscula: "acai" acha "Açaí".
+const normBusca = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+const passaBusca = (p, termo) => !termo || normBusca(p.nome + " " + (p.categoria || "")).includes(normBusca(termo));
 const temEstoque = (p) => p.estoque !== null && p.estoque !== undefined;
 const fmtQtd = (n) => String(Number(n)).replace(".", ",");
 
@@ -43,9 +46,11 @@ function esRenderCardapio() {
     <div class="kpi"><span class="muted small">Com estoque controlado</span><b>${controlados.length}</b></div>
     <div class="kpi"><span class="muted small">Acabando</span><b>${baixos.length}</b></div>
     <div class="kpi"><span class="muted small">Esgotados</span><b>${zerados.length}</b></div>`;
-  const cats = [...new Set(ES.produtos.map((p) => p.categoria || "Sem categoria"))];
-  $("#cardapio-lista").innerHTML = ES.produtos.length ? cats.map((cat) => {
-    const itens = ES.produtos.filter((p) => (p.categoria || "Sem categoria") === cat);
+  const termo = $("#busca-cardapio").value;
+  const visiveis = ES.produtos.filter((p) => passaBusca(p, termo));
+  const cats = [...new Set(visiveis.map((p) => p.categoria || "Sem categoria"))];
+  $("#cardapio-lista").innerHTML = visiveis.length ? cats.map((cat) => {
+    const itens = visiveis.filter((p) => (p.categoria || "Sem categoria") === cat);
     return `<h3 class="cat">${esc(cat)}</h3>` + itens.map((p) => {
       const id = esc(p.id);
       const esgotado = temEstoque(p) && Number(p.estoque) <= 0;
@@ -62,7 +67,7 @@ function esRenderCardapio() {
           ${confirmar}
         </div></div>`;
     }).join("");
-  }).join("") : '<p class="muted">Nenhum produto. Cadastre o primeiro acima.</p>';
+  }).join("") : `<p class="muted">${ES.produtos.length ? "Nenhum produto com esse nome." : "Nenhum produto. Cadastre o primeiro acima."}</p>`;
 }
 
 async function esSalvarEstoque(produtoId, texto) {
@@ -147,7 +152,13 @@ const esTaxa = () => {
 
 function esRenderPedido() {
   // Lista de produtos para escolher
-  $("#pedido-produtos").innerHTML = ES.produtos.map((p) => {
+  // Categorias na ordem do dia a dia; qualquer outra vem depois.
+  const ordem = ["Lanches", "Porções", "Bebidas", "Sorvetes"];
+  const cats = [...new Set(ES.produtos.map((p) => p.categoria || "Outros"))].sort((a, b) => (ordem.indexOf(a) + 1 || 99) - (ordem.indexOf(b) + 1 || 99) || a.localeCompare(b));
+  if (ESP.cat !== "todos" && !cats.includes(ESP.cat)) ESP.cat = "todos";
+  $("#cat-chips").innerHTML = ["todos", ...cats].map((c) => `<button type="button" class="chip-btn ${ESP.cat === c ? "active" : ""}" data-cat="${esc(c)}">${c === "todos" ? "Todos" : esc(c)}</button>`).join("");
+  const visiveisPedido = ES.produtos.filter((p) => (ESP.cat === "todos" || (p.categoria || "Outros") === ESP.cat) && passaBusca(p, $("#busca-pedido").value));
+  $("#pedido-produtos").innerHTML = (visiveisPedido.length ? "" : '<p class="muted">Nenhum produto com esse nome.</p>') + visiveisPedido.map((p) => {
     const qtd = ESP.itens[p.id] ? ESP.itens[p.id].qtd : 0;
     return `<button type="button" class="prod ${qtd ? "sel" : ""}" data-add="${esc(p.id)}">
       <span>${esc(p.nome)}</span><span class="small">${esFmt(p.preco)}</span>${temEstoque(p) ? `<span class="small" style="color:${Number(p.estoque) <= 0 ? "#c0392b" : "#777"}">${Number(p.estoque) <= 0 ? "Esgotado" : "Restam " + fmtQtd(p.estoque)}</span>` : ""}${qtd ? `<b class="badge-qtd">${qtd}</b><span data-sub="${esc(p.id)}" style="display:inline-block;margin-top:6px;padding:4px 12px;border:1px solid #c0392b;border-radius:999px;color:#c0392b;font-size:13px;font-weight:700;background:#fff">− Tirar 1</span>` : ""}</button>`;
@@ -523,6 +534,9 @@ function esLigarEventos() {
     if (d.removerNao) { ES.acaoProduto = null; esRenderCardapio(); }
     if (d.removerOk) esRemoverProduto(d.removerOk);
   });
+  $("#cat-chips").addEventListener("click", (e) => { const c = e.target.dataset.cat; if (c) { ESP.cat = c; esRenderPedido(); } });
+  $("#busca-pedido").addEventListener("input", () => esRenderPedido());
+  $("#busca-cardapio").addEventListener("input", () => esRenderCardapio());
   $("#cardapio-salvar").addEventListener("click", () => esNovoProduto($("#cardapio-form")));
   $("#cardapio-cancelar").addEventListener("click", () => esCancelarEdicaoProduto());
   document.querySelector('.tabs button[data-tab="relatorios"]').addEventListener("click", () => esRenderRelatorio());

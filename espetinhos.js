@@ -55,7 +55,7 @@ function esRenderCardapio() {
       const id = esc(p.id);
       const esgotado = temEstoque(p) && Number(p.estoque) <= 0;
       const acabando = temEstoque(p) && !esgotado && Number(p.estoque_minimo) > 0 && Number(p.estoque) <= Number(p.estoque_minimo);
-      const aviso = esgotado ? ' · <b style="color:#c0392b">ESGOTADO</b>' : acabando ? ' · <b style="color:#c0392b">acabando</b>' : "";
+      const aviso = esgotado ? ' · <b style="color:var(--red-dark)">ESGOTADO</b>' : acabando ? ' · <b style="color:var(--red-dark)">acabando</b>' : "";
       const confirmar = ES.acaoProduto === p.id
         ? `<span class="small muted">Excluir?</span> <button class="btn" data-remover-ok="${id}" type="button">Sim</button><button class="link" data-remover-nao="1" type="button">Não</button>`
         : `<button class="link" data-editar-produto="${id}" type="button">Editar</button><button class="link danger" data-remover-produto="${id}" type="button">Excluir</button>`;
@@ -161,7 +161,7 @@ function esRenderPedido() {
   $("#pedido-produtos").innerHTML = (visiveisPedido.length ? "" : '<p class="muted">Nenhum produto com esse nome.</p>') + visiveisPedido.map((p) => {
     const qtd = ESP.itens[p.id] ? ESP.itens[p.id].qtd : 0;
     return `<button type="button" class="prod ${qtd ? "sel" : ""}" data-add="${esc(p.id)}">
-      <span>${esc(p.nome)}</span><span class="small">${esFmt(p.preco)}</span>${temEstoque(p) ? `<span class="small" style="color:${Number(p.estoque) <= 0 ? "#c0392b" : "#777"}">${Number(p.estoque) <= 0 ? "Esgotado" : "Restam " + fmtQtd(p.estoque)}</span>` : ""}${qtd ? `<b class="badge-qtd">${qtd}</b><span data-sub="${esc(p.id)}" style="display:inline-block;margin-top:6px;padding:4px 12px;border:1px solid #c0392b;border-radius:999px;color:#c0392b;font-size:13px;font-weight:700;background:#fff">− Tirar 1</span>` : ""}</button>`;
+      <span>${esc(p.nome)}</span><span class="small">${esFmt(p.preco)}</span>${temEstoque(p) ? `<span class="small" style="color:${Number(p.estoque) <= 0 ? "var(--red-dark)" : "#777"}">${Number(p.estoque) <= 0 ? "Esgotado" : "Restam " + fmtQtd(p.estoque)}</span>` : ""}${qtd ? `<b class="badge-qtd">${qtd}</b><span data-sub="${esc(p.id)}" style="display:inline-block;margin-top:6px;padding:4px 12px;border:1px solid var(--red-dark);border-radius:999px;color:var(--red-dark);font-size:13px;font-weight:700;background:#fff">− Tirar 1</span>` : ""}</button>`;
   }).join("");
   // Carrinho
   const linhas = Object.entries(ESP.itens).map(([id, it]) => `<div class="linha">
@@ -282,7 +282,7 @@ async function esMudarStatus(pedidoId, status, forma) {
 
 // Receber e Cancelar pedem a escolha na própria tela (o navegador pode bloquear caixas de diálogo).
 function esAcoesPedido(p) {
-  if (p.status !== "aberto") return "";
+  if (p.status !== "aberto" && p.status !== "entregue") return "";
   const a = ES.acao && ES.acao.id === p.id ? ES.acao.tipo : null;
   const id = esc(p.id);
   if (a === "receber") return `<span class="small muted">Forma de pagamento:</span>
@@ -294,6 +294,7 @@ function esAcoesPedido(p) {
     <button class="link" data-voltar="1" type="button">Voltar</button>`;
   if (a === "cancelar") return `<span class="small muted">Cancelar este pedido?</span>
     <button class="btn" data-cancelar-ok="${id}" type="button">Sim, cancelar</button><button class="link" data-voltar="1" type="button">Voltar</button>`;
+  if (p.status === "entregue") return `<button class="btn" data-pago="${id}" type="button">Receber</button>`;
   return `<button class="btn" data-pago="${id}" type="button">Receber</button>
     ${p.tipo === "entrega" ? `<button class="link" data-entregue="${id}" type="button">Entregue</button>` : ""}
     <button class="link danger" data-cancelar="${id}" type="button">Cancelar</button>`;
@@ -319,18 +320,26 @@ function esRenderPedidos() {
   document.querySelectorAll("[data-filtro-tipo]").forEach((b) => b.classList.toggle("active", b.dataset.filtroTipo === ES.filtroTipo));
   document.querySelectorAll("[data-filtro-ped]").forEach((b) => b.classList.toggle("active", b.dataset.filtroPed === ES.filtroPedidos));
   const lista = doPeriodo.filter((p) => ES.filtroTipo === "todos" || p.tipo === ES.filtroTipo);
-  $("#pedidos-lista").innerHTML = lista.length ? lista.map((p) => {
+  const cartao = (p) => {
     const rotulo = p.tipo === "mesa" ? `Mesa ${p.mesa || "-"}` : p.tipo === "entrega" ? `Entrega · ${p.cliente_nome || ""}` : `Retirada · ${p.cliente_nome || ""}`;
     const frete = p.tipo === "entrega" && Number(p.taxa_entrega) ? ` · taxa ${esFmt(p.taxa_entrega)}` : "";
+    const situacao = p.status === "aberto" ? "enviado à cozinha" : p.status === "entregue" ? "entregue" : p.status === "pago" ? "pago" : p.status;
     return `<div class="linha pedido ${p.status}">
       <div class="info"><div class="titulo">${esc(rotulo)}</div>
         <div class="small muted">${esc((p.itens || []).map((i) => i.qtd + "x " + i.nome).join(", "))}</div>
-        <div class="small muted">${new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} · ${esc(p.status)}${esc(frete)}${p.forma_pagamento ? " · " + esc(p.forma_pagamento) : ""}</div></div>
+        <div class="small muted">${new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} · ${esc(situacao)}${esc(frete)}${p.forma_pagamento ? " · " + esc(p.forma_pagamento) : ""}</div></div>
       <div class="acoes"><span class="preco">${esFmt(p.total)}</span>
         ${esAcoesPedido(p)}
         <button class="link" data-imprimir-recibo="${esc(p.id)}" type="button">Imprimir recibo</button>
         <button class="link" data-baixar-pdf="${esc(p.id)}" type="button">Baixar PDF</button></div></div>`;
-  }).join("") : '<p class="muted">Nenhum pedido nesta visão.</p>';
+  };
+  const secao = (titulo, itens, vazio) => `<h2 class="sub">${titulo} (${itens.length})</h2>` + (itens.length ? itens.map(cartao).join("") : `<p class="muted">${vazio}</p>`);
+  const cozinha = lista.filter((p) => p.status === "aberto");
+  const finalizados = lista.filter((p) => p.status === "entregue" || p.status === "pago");
+  const cancelados = lista.filter((p) => p.status === "cancelado");
+  $("#pedidos-lista").innerHTML = secao("Enviados à cozinha", cozinha, "Nenhum pedido na cozinha.") +
+    secao("Finalizados (entregues e pagos)", finalizados, "Nenhum pedido finalizado.") +
+    (cancelados.length ? `<details><summary class="muted small">Cancelados (${cancelados.length})</summary>${cancelados.map(cartao).join("")}</details>` : "");
 }
 
 // ---------- Impressão do recibo: bobina de 80 mm, preto e branco, centralizado ----------
@@ -592,7 +601,7 @@ function esIniciar() {
   esLigarEventos();
   esCarregar();
   // Pedidos só recarregam a cada 60 s, e só com a tela de pedidos aberta e visível.
-  setInterval(() => { if (document.visibilityState === "visible" && document.querySelector('[data-screen="pedidos"].active')) esCarregar(); }, 60000);
+  setInterval(() => { if (document.visibilityState === "visible" && document.querySelector('[data-screen="pedidos"].active, [data-screen="vendasdia"].active')) esCarregar(); }, 60000);
 }
 
 esIniciar();

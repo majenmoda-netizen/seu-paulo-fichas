@@ -3,13 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#DA291C">
+  <meta name="theme-color" content="#E4572E">
   <title>Espetinhos do Seu Paulo</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=5">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="styles.css?v=6">
   <style>
-    @media (max-width: 899px) { .tabs { grid-template-columns: repeat(4, 1fr); } }
+    @media (max-width: 899px) { .tabs { grid-template-columns: repeat(5, 1fr); } .tabs button { white-space: normal; font-size: 12px; padding: 10px 2px; } }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand img { width: 52px; height: 52px; border-radius: 12px; object-fit: cover; border: 2px solid #fff; background: #fff; flex: 0 0 auto; }
     .subtabs { display: flex; gap: 8px; overflow-x: auto; padding: 10px 16px 0; max-width: 960px; margin: 0 auto; }
     .subtabs[hidden] { display: none; }
     .subtabs button { flex: 0 0 auto; border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 999px; padding: 8px 14px; font-size: 14px; cursor: pointer; }
@@ -18,7 +23,7 @@
 </head>
 <body>
   <header class="top">
-    <div class="brand">Espetinhos do Seu Paulo</div>
+    <div class="brand"><img src="logo.png" alt="" onerror="this.onerror=null;this.src='icon.svg'"><span>Espetinhos do Seu Paulo</span></div>
     <div id="sync-badge" class="sync" role="status"></div>
   </header>
 
@@ -68,7 +73,10 @@
         <button id="pedido-enviar" class="btn" type="button">Enviar para cozinha e caixa</button>
         <span id="pedido-msg" class="muted small"></span>
       </div>
-      <h2 class="sub">Hoje</h2>
+    </section>
+
+    <section class="screen" data-screen="vendasdia">
+      <h1>Vendas do dia</h1>
       <div id="pedidos-resumo" class="chips-row"></div>
       <div class="chips-row"><button class="chip-btn active" data-filtro-ped="hoje" type="button">Hoje</button><button class="chip-btn" data-filtro-ped="todos" type="button">Todos</button></div>
       <div class="chips-row" id="filtro-tipo"><button class="chip-btn active" data-filtro-tipo="todos" type="button">Tudo</button><button class="chip-btn" data-filtro-tipo="mesa" type="button">Mesas</button><button class="chip-btn" data-filtro-tipo="entrega" type="button">Entregas</button><button class="chip-btn" data-filtro-tipo="balcao" type="button">Retiradas</button></div>
@@ -186,6 +194,7 @@
 
   <nav class="tabs" aria-label="Menu">
     <button data-tab="pedidos" class="active">Pedidos</button>
+    <button data-tab="vendasdia">Vendas do dia</button>
     <button data-tab="cardapio">Produtos</button>
     <button data-tab="relatorios">Relatórios</button>
     <button data-tab="vender">Eventos</button>
@@ -198,6 +207,6 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="config.js?v=1"></script>
   <script src="app.js?v=8"></script>
-  <script src="espetinhos.js?v=23"></script>
+  <script src="espetinhos.js?v=24"></script>
 </body>
 </html>

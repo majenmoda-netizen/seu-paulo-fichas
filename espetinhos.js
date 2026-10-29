@@ -1,9 +1,9 @@
 "use strict";
 
-// Espetinhos do Seu Paulo: cardápio com markup, estoque de insumos, pedidos e comandas.
+// Espetinhos do Seu Paulo: cardápio, pedidos, comandas e recibos.
 // Usa a conexão `db` (Supabase) criada em app.js. Estes dados são online: sem internet, a tela avisa.
 
-const ES = { insumos: [], produtos: [], fichas: [], bairros: [], clientes: [], pedidos: [], filtroPedidos: "hoje", acao: null };
+const ES = { produtos: [], bairros: [], clientes: [], pedidos: [], filtroPedidos: "hoje", filtroTipo: "todos", acao: null, acaoProduto: null };
 const ESP = { itens: {}, tipo: "mesa", clienteId: null, forma: "Dinheiro" }; // pedido em montagem
 
 const esFmt = (n) => money(Number(n) || 0);
@@ -18,277 +18,131 @@ async function esOnline() {
 // ---------- Leitura ----------
 async function esCarregar() {
   if (!(await esOnline())) return;
-  const [ins, prod, fich, bai, cli, ped] = await Promise.all([
-    db.from("sp_insumos").select("*").eq("ativo", true).order("nome"),
+  const [prod, bai, cli, ped] = await Promise.all([
     db.from("sp_produtos").select("*").eq("ativo", true).order("nome"),
-    db.from("sp_ficha_tecnica").select("*"),
     db.from("sp_bairros").select("*").order("nome"),
     db.from("sp_clientes").select("*").order("nome"),
     db.from("sp_pedidos").select("*").order("criado_em", { ascending: false }).limit(300),
   ]);
-  const erro = [ins, prod, fich, bai, cli, ped].find((r) => r.error);
+  const erro = [prod, bai, cli, ped].find((r) => r.error);
   if (erro) { esMsg("#es-aviso", "Erro ao ler o banco: " + erro.error.message); return; }
-  ES.insumos = ins.data; ES.produtos = prod.data; ES.fichas = fich.data;
+  ES.produtos = prod.data;
   ES.bairros = bai.data; ES.clientes = cli.data; ES.pedidos = ped.data;
   esRenderTudo();
 }
 
-// Ficha técnica -> custo do produto (soma de quantidade x custo do insumo).
-const custoDoProduto = (produtoId) =>
-  ES.fichas.filter((f) => f.produto_id === produtoId).reduce((soma, f) => {
-    const insumo = ES.insumos.find((i) => i.id === f.insumo_id);
-    return soma + (insumo ? Number(f.quantidade) * Number(insumo.custo_unitario) : 0);
-  }, 0);
-
-const markupDe = (preco, custo) => (custo > 0 ? ((preco - custo) / custo) * 100 : null);
-
 // ---------- Cardápio ----------
+const temEstoque = (p) => p.estoque !== null && p.estoque !== undefined;
+const fmtQtd = (n) => String(Number(n)).replace(".", ",");
+
 function esRenderCardapio() {
+  const controlados = ES.produtos.filter(temEstoque);
+  const zerados = controlados.filter((p) => Number(p.estoque) <= 0);
+  const baixos = controlados.filter((p) => Number(p.estoque) > 0 && Number(p.estoque_minimo) > 0 && Number(p.estoque) <= Number(p.estoque_minimo));
+  $("#estoque-resumo").innerHTML = `<div class="kpi"><span class="muted small">Produtos</span><b>${ES.produtos.length}</b></div>
+    <div class="kpi"><span class="muted small">Com estoque controlado</span><b>${controlados.length}</b></div>
+    <div class="kpi"><span class="muted small">Acabando</span><b>${baixos.length}</b></div>
+    <div class="kpi"><span class="muted small">Esgotados</span><b>${zerados.length}</b></div>`;
   const cats = [...new Set(ES.produtos.map((p) => p.categoria || "Sem categoria"))];
   $("#cardapio-lista").innerHTML = ES.produtos.length ? cats.map((cat) => {
     const itens = ES.produtos.filter((p) => (p.categoria || "Sem categoria") === cat);
     return `<h3 class="cat">${esc(cat)}</h3>` + itens.map((p) => {
-      const custo = custoDoProduto(p.id);
-      const m = markupDe(Number(p.preco), custo);
+      const id = esc(p.id);
+      const esgotado = temEstoque(p) && Number(p.estoque) <= 0;
+      const acabando = temEstoque(p) && !esgotado && Number(p.estoque_minimo) > 0 && Number(p.estoque) <= Number(p.estoque_minimo);
+      const aviso = esgotado ? ' · <b style="color:#c0392b">ESGOTADO</b>' : acabando ? ' · <b style="color:#c0392b">acabando</b>' : "";
+      const confirmar = ES.acaoProduto === p.id
+        ? `<span class="small muted">Excluir?</span> <button class="btn" data-remover-ok="${id}" type="button">Sim</button><button class="link" data-remover-nao="1" type="button">Não</button>`
+        : `<button class="link" data-editar-produto="${id}" type="button">Editar</button><button class="link danger" data-remover-produto="${id}" type="button">Excluir</button>`;
       return `<div class="linha cardapio-item">
         <div class="info"><div class="titulo">${esc(p.nome)}</div>
-          <div class="small muted">Custo ${esFmt(custo)} · margem ${m === null ? "sem ficha técnica" : m.toFixed(0) + "% de markup"}</div></div>
+          <div class="small muted">${esFmt(p.preco)}${temEstoque(p) ? ` · estoque ${fmtQtd(p.estoque)}` : " · sem controle de estoque"}${aviso}</div></div>
         <div class="acoes">
-          <label class="mini">Preço<input type="text" inputmode="decimal" value="${Number(p.preco).toFixed(2).replace(".", ",")}" data-preco="${esc(p.id)}" data-custo="${custo}"></label>
-          <label class="mini">Markup %<input type="text" inputmode="decimal" value="${m === null ? "" : m.toFixed(0)}" data-markup="${esc(p.id)}" data-custo="${custo}"></label>
-          <button class="link" data-ficha="${esc(p.id)}" type="button">Ficha técnica</button>
+          <label class="mini">Estoque<input type="text" inputmode="decimal" value="${temEstoque(p) ? fmtQtd(p.estoque) : ""}" placeholder="—" data-estoque="${id}"></label>
+          ${confirmar}
         </div></div>`;
     }).join("");
   }).join("") : '<p class="muted">Nenhum produto. Cadastre o primeiro acima.</p>';
 }
 
-// Editar o preço recalcula o markup, e editar o markup recalcula o preço. Os dois podem ser alterados à vontade.
-async function esSalvarPreco(produtoId, preco) {
-  const { error } = await db.from("sp_produtos").update({ preco: round2(preco), atualizado_em: new Date().toISOString() }).eq("id", produtoId);
-  if (error) { esMsg("#es-aviso", "Erro ao salvar preço: " + error.message); return; }
+async function esSalvarEstoque(produtoId, texto) {
+  const t = String(texto).trim();
+  const valor = t === "" ? null : esNum(t);
+  if (valor !== null && !Number.isFinite(valor)) return esMsg("#cardapio-msg", "Estoque inválido.");
+  const { error } = await db.from("sp_produtos").update({ estoque: valor, atualizado_em: new Date().toISOString() }).eq("id", produtoId);
+  if (error) return esMsg("#cardapio-msg", "Erro ao salvar o estoque (rodou o SQL 04?): " + error.message);
   await esCarregar();
 }
 
-async function esSalvarMarkup(produtoId, markup, custo) {
-  const preco = round2(custo * (1 + markup / 100));
-  await esSalvarPreco(produtoId, preco);
+function esEditarProduto(id) {
+  const p = ES.produtos.find((x) => x.id === id);
+  if (!p) return;
+  const f = $("#cardapio-form");
+  f.elements.id.value = p.id;
+  f.elements.nome.value = p.nome;
+  f.elements.categoria.value = p.categoria || "";
+  f.elements.preco.value = Number(p.preco).toFixed(2).replace(".", ",");
+  f.elements.estoque.value = temEstoque(p) ? fmtQtd(p.estoque) : "";
+  f.elements.minimo.value = Number(p.estoque_minimo) ? fmtQtd(p.estoque_minimo) : "";
+  $("#cardapio-titulo").textContent = "Editar produto";
+  $("#cardapio-salvar").textContent = "Salvar alterações";
+  $("#cardapio-cancelar").hidden = false;
+  f.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function esCancelarEdicaoProduto() {
+  const f = $("#cardapio-form");
+  f.reset();
+  f.elements.id.value = "";
+  $("#cardapio-titulo").textContent = "Novo produto";
+  $("#cardapio-salvar").textContent = "Cadastrar produto";
+  $("#cardapio-cancelar").hidden = true;
 }
 
 async function esNovoProduto(form) {
   const nome = form.nome.value.trim();
   const preco = esNum(form.preco.value);
   if (!nome || !(preco >= 0)) return esMsg("#cardapio-msg", "Informe o nome e o preço.");
-  const id = uid();
-  const { error } = await db.from("sp_produtos").insert({
-    id, nome, preco: round2(preco), categoria: form.categoria.value.trim() || null, ativo: true, tipo: "produto", custo: 0,
-  });
-  if (error) return esMsg("#cardapio-msg", "Erro: " + error.message);
-  form.reset();
-  esMsg("#cardapio-msg", "Produto cadastrado. Agora monte a ficha técnica.");
-  await esCarregar();
-}
-
-// Ficha técnica: quanto de cada insumo sai em 1 unidade do produto.
-function esAbrirFicha(produtoId) {
-  const p = ES.produtos.find((x) => x.id === produtoId);
-  const linhas = ES.fichas.filter((f) => f.produto_id === produtoId);
-  const opcoes = ES.insumos.map((i) => `<option value="${esc(i.id)}">${esc(i.nome)} (${esc(String(i.unidade).toUpperCase())})</option>`).join("");
-  $("#ficha-tecnica-box").hidden = false;
-  // A caixa fica acima da lista: leva a tela até ela, senão parece que "não abriu".
-  setTimeout(() => $("#ficha-tecnica-box").scrollIntoView({ behavior: "smooth", block: "start" }), 0);
-  $("#ficha-tecnica-box").innerHTML = `
-    <h2>Ficha técnica: ${esc(p.nome)}</h2>
-    <p class="muted small">Informe quanto de cada insumo sai em <b>1 unidade</b> deste produto. Ex.: 1 pão, 150 g de carne, 1 fatia de queijo.</p>
-    ${linhas.map((f) => {
-      const i = ES.insumos.find((x) => x.id === f.insumo_id);
-      return `<div class="linha"><div class="info">${esc(i ? i.nome : "?")}</div>
-        <div class="acoes"><span>${Number(f.quantidade)} ${esc(i ? String(i.unidade).toUpperCase() : "")}</span>
-        <button class="link danger" data-del-ficha="${esc(f.id)}" type="button">Remover</button></div></div>`;
-    }).join("") || '<p class="muted">Ainda sem insumos nesta ficha.</p>'}
-    <form id="ficha-linha-form" class="form-row" data-produto="${esc(produtoId)}">
-      <select name="insumo">${opcoes}</select>
-      <input type="text" name="qtd" inputmode="decimal" placeholder="Quantidade (ex.: 150)" required>
-      <button class="btn" type="submit">Adicionar</button>
-    </form>
-    <p class="muted small">Custo atual deste produto: <b>${esFmt(custoDoProduto(produtoId))}</b></p>
-    <button class="link" type="button" id="ficha-fechar">Fechar</button>`;
-}
-
-async function esAdicionarFichaLinha(form, produtoId) {
-  const qtd = esNum(form.qtd.value);
-  if (!(qtd > 0)) return alert("Informe uma quantidade maior que zero.");
-  const id = uid();
-  const { error } = await db.from("sp_ficha_tecnica").upsert({ id, produto_id: produtoId, insumo_id: form.insumo.value, quantidade: qtd }, { onConflict: "produto_id,insumo_id" });
-  if (error) return alert("Erro: " + error.message);
-  await esRecalcularCustos();
-  await esCarregar();
-  esAbrirFicha(produtoId);
-}
-
-async function esRemoverFichaLinha(fichaId, produtoId) {
-  await db.from("sp_ficha_tecnica").delete().eq("id", fichaId);
-  await esRecalcularCustos();
-  await esCarregar();
-  esAbrirFicha(produtoId);
-}
-
-// Guarda o custo calculado em cada produto (para o cardápio e para o markup ficarem sempre certos).
-async function esRecalcularCustos() {
-  for (const p of ES.produtos) {
-    const custo = round2(custoDoProduto(p.id));
-    if (Number(p.custo) !== custo) await db.from("sp_produtos").update({ custo }).eq("id", p.id);
-  }
-}
-
-// ---------- Estoque ----------
-const chaveNome = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
-
-// Bebida vendida como está (ex.: Ref Vedete 2 L): o insumo de mesmo nome vira a ficha de 1 unidade.
-async function esVincularPorNome(insumoId, nome) {
-  for (const p of ES.produtos) {
-    if (chaveNome(p.nome) === chaveNome(nome) && !ES.fichas.some((f) => f.produto_id === p.id)) {
-      await db.from("sp_ficha_tecnica").insert({ id: uid(), produto_id: p.id, insumo_id: insumoId, quantidade: 1 });
-    }
-  }
-}
-function esRenderEstoque() {
-  const baixos = ES.insumos.filter((i) => Number(i.estoque_atual) <= Number(i.estoque_minimo) && Number(i.estoque_minimo) > 0);
-  $("#estoque-alerta").innerHTML = baixos.length ? `<div class="aviso">Abaixo do mínimo: ${baixos.map((i) => esc(i.nome)).join(", ")}</div>` : "";
-  const valorTotal = ES.insumos.reduce((soma, i) => soma + Number(i.estoque_atual) * Number(i.custo_unitario), 0);
-  const cabecalho = ES.insumos.length ? `<div class="kpi" style="margin-bottom:12px"><span class="muted small">Valor total em estoque</span><b>${esFmt(valorTotal)}</b></div>` : "";
-  $("#estoque-lista").innerHTML = ES.insumos.length ? cabecalho + ES.insumos.map((i) => {
-    const baixo = Number(i.estoque_minimo) > 0 && Number(i.estoque_atual) <= Number(i.estoque_minimo);
-    const custo = Number(i.custo_unitario);
-    const valor = Number(i.estoque_atual) * custo;
-    const prod = ES.produtos.find((p) => chaveNome(p.nome) === chaveNome(i.nome));
-    const markup = prod && custo > 0 ? ((Number(prod.preco) - custo) / custo) * 100 : null;
-    const venda = prod ? `<div class="small"><b>Vendido a ${esFmt(prod.preco)}</b>${markup === null ? "" : ` · markup ${markup.toFixed(0)}%`}</div>` : "";
-    return `<div class="linha ${baixo ? "alerta" : ""}">
-      <div class="info"><div class="titulo">${esc(i.nome)}</div>
-        <div class="small muted">${esc(i.categoria || "")} · custo ${esFmt(custo)} por ${esc(String(i.unidade).toUpperCase())} · ${Number(i.estoque_atual)} ${esc(String(i.unidade).toUpperCase())} valem ${esFmt(valor)}</div>
-        ${venda}</div>
-      <div class="acoes"><span class="preco">${Number(i.estoque_atual)} ${esc(String(i.unidade).toUpperCase())}</span>
-        <button class="link" data-editar-insumo="${esc(i.id)}" type="button">Editar</button>
-        <button class="link" data-mov="${esc(i.id)}" type="button">Movimentar</button></div></div>`;
-  }).join("") : '<p class="muted">Nenhum insumo. Cadastre carne, pão, açaí, chopp, bebidas, embalagens...</p>';
-}
-
-// Preenche o formulário de cima com os dados do insumo, para editar.
-function esEditarInsumo(id) {
-  const i = ES.insumos.find((x) => x.id === id);
-  const f = $("#estoque-form");
-  f.elements.id.value = i.id;
-  f.elements.nome.value = i.nome;
-  f.elements.unidade.value = String(i.unidade).toUpperCase();
-  f.elements.categoria.value = i.categoria || "";
-  f.elements.custo.value = String(Number(i.custo_unitario)).replace(".", ",");
-  f.elements.total.value = "";
-  f.elements.inicial.value = "";
-  f.elements.minimo.value = String(Number(i.estoque_minimo)).replace(".", ",");
-  $("#estoque-titulo").textContent = "Editar insumo";
-  $("#estoque-salvar").textContent = "Salvar alterações";
-  $("#estoque-cancelar").hidden = false;
-  $("#estoque-msg").textContent = "Para mudar a quantidade em estoque, use Movimentar.";
-  f.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-function esCancelarEdicaoInsumo() {
-  const f = $("#estoque-form");
-  f.reset();
-  f.elements.id.value = "";
-  $("#estoque-titulo").textContent = "Novo insumo";
-  $("#estoque-salvar").textContent = "Cadastrar insumo";
-  $("#estoque-cancelar").hidden = true;
-  $("#estoque-msg").textContent = "";
-}
-
-async function esNovoInsumo(form) {
+  const txtEstoque = form.estoque.value.trim();
+  const estoque = txtEstoque === "" ? null : esNum(txtEstoque);
+  if (estoque !== null && !Number.isFinite(estoque)) return esMsg("#cardapio-msg", "Estoque inválido.");
+  const dados = {
+    nome, preco: round2(preco), categoria: form.categoria.value.trim() || null,
+    estoque, estoque_minimo: esNum(form.minimo.value) || 0, atualizado_em: new Date().toISOString(),
+  };
   const editando = form.elements.id.value;
-  const nome = form.nome.value.trim();
-  let custo = esNum(form.custo.value) || 0;
-  const inicial = esNum(form.inicial.value) || 0;
-  if (!nome) return esMsg("#estoque-msg", "Informe o nome.");
-  // "Valor total pago" (ex.: barril de 30 L por R$ 330) vira custo por litro/kg/unidade.
-  const totalPago = esNum(form.total.value) || 0;
-  if (totalPago > 0) {
-    const base = editando ? Number((ES.insumos.find((x) => x.id === editando) || {}).estoque_atual) || 0 : inicial;
-    if (!(base > 0)) return esMsg("#estoque-msg", "Para usar o valor total, informe a quantidade (estoque inicial).");
-    custo = totalPago / base;
-  }
-  if (editando) {
-    const { error: erroEdicao } = await db.from("sp_insumos").update({
-      nome, unidade: form.unidade.value, categoria: form.categoria.value.trim() || null,
-      custo_unitario: custo, estoque_minimo: esNum(form.minimo.value) || 0, atualizado_em: new Date().toISOString(),
-    }).eq("id", editando);
-    if (erroEdicao) return esMsg("#estoque-msg", "Erro: " + erroEdicao.message);
-    await esCarregar();
-    await esVincularPorNome(editando, nome);
-    await esRecalcularCustos();
-    esCancelarEdicaoInsumo();
-    esMsg("#estoque-msg", "Insumo atualizado.");
-    return esCarregar();
-  }
-  const id = uid();
-  const { error } = await db.from("sp_insumos").insert({
-    id, nome, unidade: form.unidade.value, categoria: form.categoria.value.trim() || null,
-    custo_unitario: custo, estoque_atual: inicial, estoque_minimo: esNum(form.minimo.value) || 0, ativo: true,
-  });
-  if (error) return esMsg("#estoque-msg", "Erro: " + error.message);
-  if (inicial > 0) await db.from("sp_movimentos_estoque").insert({ id: uid(), insumo_id: id, tipo: "entrada", quantidade: inicial, custo_unitario: custo, observacao: "Estoque inicial" });
-  await esCarregar();
-  await esVincularPorNome(id, nome);
-  await esRecalcularCustos();
-  form.reset();
-  esMsg("#estoque-msg", "Insumo cadastrado.");
+  const { error } = editando
+    ? await db.from("sp_produtos").update(dados).eq("id", editando)
+    : await db.from("sp_produtos").insert({ id: uid(), ativo: true, tipo: "produto", custo: 0, ...dados });
+  if (error) return esMsg("#cardapio-msg", "Erro (rodou o SQL 04?): " + error.message);
+  esCancelarEdicaoProduto();
+  esMsg("#cardapio-msg", editando ? "Produto atualizado." : "Produto cadastrado.");
   await esCarregar();
 }
 
-// Movimentação: entrada soma, saída subtrai, ajuste define o valor contado.
-async function esMovimentar(insumoId, tipo, quantidade, custo, observacao) {
-  const i = ES.insumos.find((x) => x.id === insumoId);
-  let novo = Number(i.estoque_atual);
-  if (tipo === "entrada") novo += quantidade;
-  if (tipo === "saida") novo -= quantidade;
-  if (tipo === "ajuste") novo = quantidade;
-  const atualiza = { estoque_atual: novo, atualizado_em: new Date().toISOString() };
-  if (tipo === "entrada" && custo > 0) atualiza.custo_unitario = custo;
-  const { error } = await db.from("sp_insumos").update(atualiza).eq("id", insumoId);
-  if (error) return alert("Erro: " + error.message);
-  await db.from("sp_movimentos_estoque").insert({ id: uid(), insumo_id: insumoId, tipo, quantidade: tipo === "ajuste" ? Math.abs(novo - Number(i.estoque_atual)) : quantidade, custo_unitario: custo || null, observacao: observacao || null });
-  if (tipo === "entrada" && custo > 0) await esRecalcularCustos();
+// Excluir produto: some da lista, mas os pedidos antigos continuam com o nome e o preço da época.
+async function esRemoverProduto(id) {
+  if (!ES.produtos.some((x) => x.id === id)) return;
+  await db.from("sp_produtos").update({ ativo: false, atualizado_em: new Date().toISOString() }).eq("id", id);
+  ES.acaoProduto = null;
   await esCarregar();
 }
 
-// Janela própria para Movimentar (o navegador pode bloquear prompt()).
-function esDialogoMovimento(insumo) {
-  const u = esc(String(insumo.unidade).toUpperCase());
-  const box = document.createElement("div");
-  box.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;z-index:1000";
-  box.innerHTML = `<form class="card form-grid" style="max-width:380px;width:100%;margin:0" onsubmit="return false">
-    <h2>Movimentar: ${esc(insumo.nome)}</h2>
-    <label>O que aconteceu?<select name="tipo"><option value="entrada">Entrada (comprei)</option><option value="saida">Saída (perda, consumo)</option><option value="ajuste">Ajuste (contei o estoque)</option></select></label>
-    <label>Quantidade (${u})<input type="text" name="qtd" inputmode="decimal" placeholder="Ex.: 30"></label>
-    <label data-total>Valor total pago (R$), opcional<input type="text" name="total" inputmode="decimal" placeholder="Ex.: 330 — calculo o custo por ${u}"></label>
-    <div class="actions"><button type="button" class="btn" data-ok>Salvar</button><button type="button" class="link" data-fechar>Cancelar</button><span class="muted small" data-msg></span></div></form>`;
-  document.body.appendChild(box);
-  const f = box.querySelector("form");
-  f.tipo.addEventListener("change", () => { box.querySelector("[data-total]").hidden = f.tipo.value !== "entrada"; });
-  box.querySelector("[data-fechar]").addEventListener("click", () => box.remove());
-  box.querySelector("[data-ok]").addEventListener("click", async () => {
-    const qtd = esNum(f.qtd.value);
-    if (!(qtd >= 0) || f.qtd.value.trim() === "") return (box.querySelector("[data-msg]").textContent = "Informe a quantidade.");
-    const total = f.tipo.value === "entrada" ? esNum(f.total.value) || 0 : 0;
-    box.remove();
-    await esMovimentar(insumo.id, f.tipo.value, qtd, qtd > 0 ? total / qtd : 0, "");
-  });
+// Baixa e devolução de estoque dos pedidos (só nos produtos que controlam estoque).
+async function esAjustarEstoque(pedido, sinal) {
+  for (const it of pedido.itens || []) {
+    const { data: prod } = await db.from("sp_produtos").select("estoque").eq("id", it.produto_id).single();
+    if (!prod || prod.estoque === null || prod.estoque === undefined) continue;
+    await db.from("sp_produtos").update({ estoque: Number(prod.estoque) + sinal * Number(it.qtd), atualizado_em: new Date().toISOString() }).eq("id", it.produto_id);
+  }
 }
 
 // ---------- Pedidos ----------
 const esTotalPedido = () => Object.values(ESP.itens).reduce((s, it) => s + it.qtd * it.preco, 0);
 const esTaxa = () => {
   if (ESP.tipo !== "entrega") return 0;
-  const b = ES.bairros.find((x) => x.nome === $("#pedido-bairro").value);
-  return b ? Number(b.taxa) : 0;
+  const n = esNum($("#pedido-form").elements.taxa.value);
+  return n > 0 ? n : 0;
 };
 
 function esRenderPedido() {
@@ -296,7 +150,7 @@ function esRenderPedido() {
   $("#pedido-produtos").innerHTML = ES.produtos.map((p) => {
     const qtd = ESP.itens[p.id] ? ESP.itens[p.id].qtd : 0;
     return `<button type="button" class="prod ${qtd ? "sel" : ""}" data-add="${esc(p.id)}">
-      <span>${esc(p.nome)}</span><span class="small">${esFmt(p.preco)}</span>${qtd ? `<b class="badge-qtd">${qtd}</b><span data-sub="${esc(p.id)}" style="display:inline-block;margin-top:6px;padding:4px 12px;border:1px solid #c0392b;border-radius:999px;color:#c0392b;font-size:13px;font-weight:700;background:#fff">− Tirar 1</span>` : ""}</button>`;
+      <span>${esc(p.nome)}</span><span class="small">${esFmt(p.preco)}</span>${temEstoque(p) ? `<span class="small" style="color:${Number(p.estoque) <= 0 ? "#c0392b" : "#777"}">${Number(p.estoque) <= 0 ? "Esgotado" : "Restam " + fmtQtd(p.estoque)}</span>` : ""}${qtd ? `<b class="badge-qtd">${qtd}</b><span data-sub="${esc(p.id)}" style="display:inline-block;margin-top:6px;padding:4px 12px;border:1px solid #c0392b;border-radius:999px;color:#c0392b;font-size:13px;font-weight:700;background:#fff">− Tirar 1</span>` : ""}</button>`;
   }).join("");
   // Carrinho
   const linhas = Object.entries(ESP.itens).map(([id, it]) => `<div class="linha">
@@ -317,7 +171,7 @@ function esRenderPedido() {
   const bairroAtual = $("#pedido-bairro").value;
   $("#pedido-cliente").innerHTML = '<option value="">Novo cliente</option>' + ES.clientes.map((c) => `<option value="${esc(c.id)}">${esc(c.nome)}${c.bairro ? " · " + esc(c.bairro) : ""}</option>`).join("");
   $("#pedido-cliente").value = clienteAtual;
-  $("#pedido-bairro").innerHTML = '<option value="">Escolha o bairro</option>' + ES.bairros.map((b) => `<option value="${esc(b.nome)}">${esc(b.nome)} (${esFmt(b.taxa)})</option>`).join("");
+  $("#pedido-bairro").innerHTML = '<option value="">Sem bairro / outro</option>' + ES.bairros.map((b) => `<option value="${esc(b.nome)}">${esc(b.nome)} (${esFmt(b.taxa)})</option>`).join("");
   $("#pedido-bairro").value = bairroAtual;
 }
 
@@ -343,13 +197,12 @@ async function esEnviarPedido() {
       const { error: erroCliente } = await db.from("sp_clientes").insert(cliente);
       if (erroCliente) return esMsg("#pedido-msg", "Erro ao cadastrar o cliente: " + erroCliente.message);
     }
-    bairro = $("#pedido-bairro").value || (cliente && cliente.bairro);
-    if (!bairro) return esMsg("#pedido-msg", "Escolha o bairro para calcular a taxa.");
+    bairro = $("#pedido-bairro").value || (cliente && cliente.bairro) || null;
     endereco = cliente && cliente.endereco;
   }
-  const taxa = esTaxa() || (ESP.tipo === "entrega" ? Number((ES.bairros.find((b) => b.nome === bairro) || {}).taxa || 0) : 0);
+  const taxa = esTaxa();
   const subtotal = round2(esTotalPedido());
-  const itens = Object.entries(ESP.itens).map(([id, it]) => ({ produto_id: id, nome: it.nome, qtd: it.qtd, preco: it.preco, custo: custoDoProduto(id) }));
+  const itens = Object.entries(ESP.itens).map(([id, it]) => ({ produto_id: id, nome: it.nome, qtd: it.qtd, preco: it.preco, custo: 0 }));
   const pedido = {
     id: uid(), tipo: ESP.tipo, mesa: ESP.tipo === "mesa" ? f.elements.mesa.value.trim() || null : null,
     cliente_id: cliente ? cliente.id : null, cliente_nome: ESP.tipo === "balcao" ? (f.elements.pessoaX.value.trim() || "Retirada") : (cliente ? cliente.nome : null),
@@ -358,7 +211,7 @@ async function esEnviarPedido() {
   };
   const { error } = await db.from("sp_pedidos").insert(pedido);
   if (error) return esMsg("#pedido-msg", "Erro: " + error.message);
-  await esBaixarEstoque(pedido);
+  await esAjustarEstoque(pedido, -1);
   await esImprimir(pedido);
   ESP.itens = {}; ESP.clienteId = null; f.reset();
   esMsg("#pedido-msg", "Pedido enviado para a cozinha e o caixa.");
@@ -411,33 +264,9 @@ async function esMudarStatus(pedidoId, status, forma) {
   if (status === "pago") { upd.forma_pagamento = forma || "Dinheiro"; upd.fechado_em = new Date().toISOString(); }
   const { error } = await db.from("sp_pedidos").update(upd).eq("id", pedidoId);
   if (error) return alert("Erro: " + error.message);
-  // A baixa acontece ao criar o pedido; cancelar devolve ao estoque o que foi baixado.
-  if (era !== "cancelado" && status === "cancelado") await esDevolverEstoque(p);
+  if (era === "aberto" && status === "cancelado") await esAjustarEstoque(p, +1);
   ES.acao = null;
   await esCarregar();
-}
-
-async function esDevolverEstoque(pedido) {
-  const { data: movs } = await db.from("sp_movimentos_estoque").select("*").eq("pedido_id", pedido.id).eq("tipo", "venda");
-  for (const m of movs || []) {
-    const { data: ins } = await db.from("sp_insumos").select("estoque_atual").eq("id", m.insumo_id).single();
-    if (!ins) continue;
-    await db.from("sp_insumos").update({ estoque_atual: Number(ins.estoque_atual) + Number(m.quantidade), atualizado_em: new Date().toISOString() }).eq("id", m.insumo_id);
-    await db.from("sp_movimentos_estoque").delete().eq("id", m.id);
-  }
-}
-
-async function esBaixarEstoque(pedido) {
-  for (const it of pedido.itens || []) {
-    for (const f of ES.fichas.filter((x) => x.produto_id === it.produto_id)) {
-      const insumo = ES.insumos.find((i) => i.id === f.insumo_id);
-      if (!insumo) continue;
-      const qtd = Number(f.quantidade) * it.qtd;
-      insumo.estoque_atual = Number(insumo.estoque_atual) - qtd;
-      await db.from("sp_insumos").update({ estoque_atual: insumo.estoque_atual, atualizado_em: new Date().toISOString() }).eq("id", insumo.id);
-      await db.from("sp_movimentos_estoque").insert({ id: uid(), insumo_id: insumo.id, tipo: "venda", quantidade: qtd, custo_unitario: Number(insumo.custo_unitario), pedido_id: pedido.id, observacao: `Pedido ${pedido.id.slice(0, 6)}` });
-    }
-  }
 }
 
 // Receber e Cancelar pedem a escolha na própria tela (o navegador pode bloquear caixas de diálogo).
@@ -452,25 +281,40 @@ function esAcoesPedido(p) {
   if (a === "cartao") return `<span class="small muted">Cartão:</span>
     ${["Débito", "Crédito"].map((f) => `<button class="btn" data-pagar="${id}" data-forma="Cartão ${f}" type="button">${f}</button>`).join("")}
     <button class="link" data-voltar="1" type="button">Voltar</button>`;
-  if (a === "cancelar") return `<span class="small muted">Cancelar este pedido e devolver o estoque?</span>
+  if (a === "cancelar") return `<span class="small muted">Cancelar este pedido?</span>
     <button class="btn" data-cancelar-ok="${id}" type="button">Sim, cancelar</button><button class="link" data-voltar="1" type="button">Voltar</button>`;
   return `<button class="btn" data-pago="${id}" type="button">Receber</button>
     ${p.tipo === "entrega" ? `<button class="link" data-entregue="${id}" type="button">Entregue</button>` : ""}
     <button class="link danger" data-cancelar="${id}" type="button">Cancelar</button>`;
 }
 
+const dataLocal = (d) => { const x = new Date(d); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`; };
+
 function esRenderPedidos() {
-  const hoje = new Date().toISOString().slice(0, 10);
-  const lista = ES.pedidos.filter((p) => ES.filtroPedidos === "todos" || (p.criado_em || "").slice(0, 10) === hoje);
-  const totalPago = lista.filter((p) => p.status === "pago").reduce((s, p) => s + Number(p.total), 0);
-  $("#pedidos-resumo").innerHTML = `<div class="kpi"><span class="muted small">Pedidos</span><b>${lista.length}</b></div>
-    <div class="kpi"><span class="muted small">Recebido</span><b>${esFmt(totalPago)}</b></div>`;
+  const hoje = dataLocal(new Date());
+  const doPeriodo = ES.pedidos.filter((p) => ES.filtroPedidos === "todos" || dataLocal(p.criado_em) === hoje);
+  const validos = doPeriodo.filter((p) => p.status !== "cancelado");
+  const soma = (l) => l.reduce((t, p) => t + Number(p.total), 0);
+  const porTipo = (t) => validos.filter((p) => p.tipo === t);
+  const totalPago = soma(validos.filter((p) => p.status === "pago"));
+  const taxas = validos.reduce((t, p) => t + Number(p.taxa_entrega || 0), 0);
+  $("#pedidos-resumo").innerHTML = `<div class="kpi"><span class="muted small">Pedidos</span><b>${validos.length}</b></div>
+    <div class="kpi"><span class="muted small">Vendido</span><b>${esFmt(soma(validos))}</b></div>
+    <div class="kpi"><span class="muted small">Recebido</span><b>${esFmt(totalPago)}</b></div>
+    <div class="kpi"><span class="muted small">Mesas (${porTipo("mesa").length})</span><b>${esFmt(soma(porTipo("mesa")))}</b></div>
+    <div class="kpi"><span class="muted small">Entregas (${porTipo("entrega").length})</span><b>${esFmt(soma(porTipo("entrega")))}</b></div>
+    <div class="kpi"><span class="muted small">Retiradas (${porTipo("balcao").length})</span><b>${esFmt(soma(porTipo("balcao")))}</b></div>
+    <div class="kpi"><span class="muted small">Taxas de entrega</span><b>${esFmt(taxas)}</b></div>`;
+  document.querySelectorAll("[data-filtro-tipo]").forEach((b) => b.classList.toggle("active", b.dataset.filtroTipo === ES.filtroTipo));
+  document.querySelectorAll("[data-filtro-ped]").forEach((b) => b.classList.toggle("active", b.dataset.filtroPed === ES.filtroPedidos));
+  const lista = doPeriodo.filter((p) => ES.filtroTipo === "todos" || p.tipo === ES.filtroTipo);
   $("#pedidos-lista").innerHTML = lista.length ? lista.map((p) => {
     const rotulo = p.tipo === "mesa" ? `Mesa ${p.mesa || "-"}` : p.tipo === "entrega" ? `Entrega · ${p.cliente_nome || ""}` : `Retirada · ${p.cliente_nome || ""}`;
+    const frete = p.tipo === "entrega" && Number(p.taxa_entrega) ? ` · taxa ${esFmt(p.taxa_entrega)}` : "";
     return `<div class="linha pedido ${p.status}">
       <div class="info"><div class="titulo">${esc(rotulo)}</div>
         <div class="small muted">${esc((p.itens || []).map((i) => i.qtd + "x " + i.nome).join(", "))}</div>
-        <div class="small muted">${new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} · ${esc(p.status)}</div></div>
+        <div class="small muted">${new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} · ${esc(p.status)}${esc(frete)}${p.forma_pagamento ? " · " + esc(p.forma_pagamento) : ""}</div></div>
       <div class="acoes"><span class="preco">${esFmt(p.total)}</span>
         ${esAcoesPedido(p)}
         <button class="link" data-imprimir-recibo="${esc(p.id)}" type="button">Imprimir recibo</button>
@@ -587,31 +431,106 @@ function esImprimirDoc(p) {
   setTimeout(() => window.print(), 50);
 }
 
+// ---------- Relatórios ----------
+const csvTexto = (linhas) => "\ufeff" + linhas.map((l) => l.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(";")).join("\r\n");
+function esBaixarCsv(nome, linhas) {
+  const url = URL.createObjectURL(new Blob([csvTexto(linhas)], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = nome; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+const brData = (iso) => new Date(iso).toLocaleDateString("pt-BR");
+const brHora = (iso) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+const nomeTipo = (t) => (t === "mesa" ? "Mesa" : t === "entrega" ? "Entrega" : "Retirada");
+
+async function esPedidosDoPeriodo() {
+  const de = $("#rel-de").value, ate = $("#rel-ate").value;
+  const ini = new Date(de + "T00:00:00").toISOString();
+  const fim = new Date(ate + "T23:59:59.999").toISOString();
+  const { data, error } = await db.from("sp_pedidos").select("*").gte("criado_em", ini).lte("criado_em", fim).order("criado_em");
+  if (error) { esMsg("#rel-msg", "Erro: " + error.message); return null; }
+  return data.filter((p) => p.status !== "cancelado");
+}
+
+function esDefinirPeriodo(dias) {
+  const fim = new Date(), ini = new Date();
+  ini.setDate(ini.getDate() - dias);
+  $("#rel-de").value = dataLocal(ini); $("#rel-ate").value = dataLocal(fim);
+  esRenderRelatorio();
+}
+
+async function esRenderRelatorio() {
+  if (!$("#rel-de").value) { $("#rel-de").value = dataLocal(new Date()); $("#rel-ate").value = dataLocal(new Date()); }
+  const ped = await esPedidosDoPeriodo();
+  if (!ped) return;
+  const soma = (l) => l.reduce((t, p) => t + Number(p.total), 0);
+  const taxas = ped.reduce((t, p) => t + Number(p.taxa_entrega || 0), 0);
+  const porPag = {};
+  ped.filter((p) => p.status === "pago").forEach((p) => { const f = p.forma_pagamento || "Dinheiro"; porPag[f] = (porPag[f] || 0) + Number(p.total); });
+  const prods = {};
+  ped.forEach((p) => (p.itens || []).forEach((i) => { const r = prods[i.nome] || (prods[i.nome] = { qtd: 0, total: 0 }); r.qtd += Number(i.qtd); r.total += Number(i.qtd) * Number(i.preco); }));
+  const top = Object.entries(prods).sort((a, b) => b[1].qtd - a[1].qtd).slice(0, 10);
+  $("#rel-resumo").innerHTML = `<div class="chips-row">
+      <div class="kpi"><span class="muted small">Pedidos</span><b>${ped.length}</b></div>
+      <div class="kpi"><span class="muted small">Vendido</span><b>${esFmt(soma(ped))}</b></div>
+      <div class="kpi"><span class="muted small">Taxas de entrega</span><b>${esFmt(taxas)}</b></div>
+      ${["mesa", "entrega", "balcao"].map((t) => `<div class="kpi"><span class="muted small">${nomeTipo(t)}s (${ped.filter((p) => p.tipo === t).length})</span><b>${esFmt(soma(ped.filter((p) => p.tipo === t)))}</b></div>`).join("")}
+    </div>
+    <h2 class="sub">Recebido por forma de pagamento</h2>
+    <div class="chips-row">${Object.keys(porPag).length ? Object.entries(porPag).map(([f, v]) => `<div class="kpi"><span class="muted small">${esc(f)}</span><b>${esFmt(v)}</b></div>`).join("") : '<span class="muted small">Nada recebido no período.</span>'}</div>
+    <h2 class="sub">Mais vendidos</h2>
+    ${top.length ? top.map(([n, r]) => `<div class="linha"><div class="info">${esc(n)}</div><div class="acoes"><span>${fmtQtd(r.qtd)} un · ${esFmt(r.total)}</span></div></div>`).join("") : '<p class="muted">Sem vendas no período.</p>'}`;
+}
+
+async function esBaixarRelatorio(tipo) {
+  const periodo = `${$("#rel-de").value}_a_${$("#rel-ate").value}`;
+  if (tipo === "estoque") {
+    return esBaixarCsv(`estoque-${dataLocal(new Date())}.csv`, [["Produto", "Categoria", "Preço", "Estoque", "Avisar em"],
+      ...ES.produtos.map((p) => [p.nome, p.categoria || "", brNum(p.preco), temEstoque(p) ? fmtQtd(p.estoque) : "sem controle", Number(p.estoque_minimo) ? fmtQtd(p.estoque_minimo) : ""])]);
+  }
+  const ped = await esPedidosDoPeriodo();
+  if (!ped) return;
+  if (tipo === "vendas") {
+    esBaixarCsv(`vendas-${periodo}.csv`, [["Data", "Hora", "Pedido", "Tipo", "Mesa", "Cliente", "Endereço", "Bairro", "Itens", "Subtotal", "Taxa de entrega", "Total", "Pagamento", "Status"],
+      ...ped.map((p) => [brData(p.criado_em), brHora(p.criado_em), p.id.slice(0, 6).toUpperCase(), nomeTipo(p.tipo), p.mesa || "", p.cliente_nome || "", p.endereco || "", p.bairro || "",
+        (p.itens || []).map((i) => `${i.qtd}x ${i.nome}`).join(" + "), brNum(p.subtotal), brNum(p.taxa_entrega || 0), brNum(p.total), p.forma_pagamento || "", p.status])]);
+  } else if (tipo === "produtos") {
+    const prods = {};
+    ped.forEach((p) => (p.itens || []).forEach((i) => { const r = prods[i.nome] || (prods[i.nome] = { qtd: 0, total: 0 }); r.qtd += Number(i.qtd); r.total += Number(i.qtd) * Number(i.preco); }));
+    esBaixarCsv(`produtos-vendidos-${periodo}.csv`, [["Produto", "Quantidade", "Total vendido"],
+      ...Object.entries(prods).sort((a, b) => b[1].qtd - a[1].qtd).map(([n, r]) => [n, fmtQtd(r.qtd), brNum(r.total)])]);
+  } else if (tipo === "clientes") {
+    esBaixarCsv(`clientes-${periodo}.csv`, [["Cliente", "Telefone", "Endereço", "Bairro", "Pedidos no período", "Total gasto no período"],
+      ...ES.clientes.map((c) => { const meus = ped.filter((p) => p.cliente_id === c.id); return [c.nome, c.telefone || "", c.endereco || "", c.bairro || "", meus.length, brNum(meus.reduce((t, p) => t + Number(p.total), 0))]; })]);
+  }
+  esMsg("#rel-msg", "Arquivo baixado. Abra no Excel ou no Numbers.");
+}
+
 // ---------- Renderização geral e eventos ----------
 function esRenderTudo() {
-  esRenderCardapio(); esRenderEstoque(); esRenderPedido(); esRenderPedidos();
+  esRenderCardapio(); esRenderPedido(); esRenderPedidos();
 }
 
 function esLigarEventos() {
   $("#cardapio-lista").addEventListener("change", (e) => {
     const t = e.target;
-    if (t.dataset.preco) esSalvarPreco(t.dataset.preco, esNum(t.value));
-    if (t.dataset.markup) esSalvarMarkup(t.dataset.markup, esNum(t.value), Number(t.dataset.custo));
+    if (t.dataset.estoque) esSalvarEstoque(t.dataset.estoque, t.value);
   });
-  $("#cardapio-lista").addEventListener("click", (e) => { if (e.target.dataset.ficha) esAbrirFicha(e.target.dataset.ficha); });
+  $("#cardapio-lista").addEventListener("click", (e) => {
+    const d = e.target.dataset;
+    if (d.editarProduto) esEditarProduto(d.editarProduto);
+    if (d.removerProduto) { ES.acaoProduto = d.removerProduto; esRenderCardapio(); }
+    if (d.removerNao) { ES.acaoProduto = null; esRenderCardapio(); }
+    if (d.removerOk) esRemoverProduto(d.removerOk);
+  });
   $("#cardapio-salvar").addEventListener("click", () => esNovoProduto($("#cardapio-form")));
-  $("#ficha-tecnica-box").addEventListener("submit", (e) => { if (e.target.id === "ficha-linha-form") { e.preventDefault(); esAdicionarFichaLinha(e.target, e.target.dataset.produto); } });
-  $("#ficha-tecnica-box").addEventListener("click", (e) => {
-    if (e.target.dataset.delFicha) esRemoverFichaLinha(e.target.dataset.delFicha, $("#ficha-linha-form").dataset.produto);
-    if (e.target.id === "ficha-fechar") $("#ficha-tecnica-box").hidden = true;
-  });
-  $("#estoque-salvar").addEventListener("click", () => esNovoInsumo($("#estoque-form")));
-  $("#estoque-cancelar").addEventListener("click", () => esCancelarEdicaoInsumo());
-  $("#estoque-lista").addEventListener("click", (e) => {
-    if (e.target.dataset.editarInsumo) return esEditarInsumo(e.target.dataset.editarInsumo);
-    const id = e.target.dataset.mov; if (!id) return;
-    esDialogoMovimento(ES.insumos.find((x) => x.id === id));
-  });
+  $("#cardapio-cancelar").addEventListener("click", () => esCancelarEdicaoProduto());
+  document.querySelector('.tabs button[data-tab="relatorios"]').addEventListener("click", () => esRenderRelatorio());
+  $("#rel-de").addEventListener("change", () => esRenderRelatorio());
+  $("#rel-ate").addEventListener("change", () => esRenderRelatorio());
+  document.querySelectorAll("[data-rel-atalho]").forEach((b) => b.addEventListener("click", () => esDefinirPeriodo({ hoje: 0, semana: 6, mes: new Date().getDate() - 1 }[b.dataset.relAtalho])));
+  document.querySelectorAll("[data-rel-baixar]").forEach((b) => b.addEventListener("click", () => esBaixarRelatorio(b.dataset.relBaixar)));
+  document.querySelectorAll("[data-filtro-tipo]").forEach((b) => b.addEventListener("click", () => { ES.filtroTipo = b.dataset.filtroTipo; esRenderPedidos(); }));
   document.querySelectorAll("[data-tipo]").forEach((b) => b.addEventListener("click", () => { ESP.tipo = b.dataset.tipo; esRenderPedido(); }));
   $("#pedido-produtos").addEventListener("click", (e) => {
     const sub = e.target.closest("[data-sub]");
@@ -631,7 +550,13 @@ function esLigarEventos() {
     if (c) { $("#pedido-bairro").value = c.bairro || ""; $("#pedido-form").elements.endereco.value = c.endereco || ""; }
     esRenderPedido();
   });
-  $("#pedido-bairro").addEventListener("change", () => esRenderPedido());
+  $("#pedido-bairro").addEventListener("change", (e) => {
+    // Escolher o bairro sugere a taxa cadastrada; o valor continua editável.
+    const b = ES.bairros.find((x) => x.nome === e.target.value);
+    if (b) $("#pedido-form").elements.taxa.value = Number(b.taxa).toFixed(2).replace(".", ",");
+    esRenderPedido();
+  });
+  $("#pedido-form").elements.taxa.addEventListener("input", () => esRenderPedido());
   $("#pedido-enviar").addEventListener("click", () => esEnviarPedido());
   $("#pedidos-lista").addEventListener("click", (e) => {
     const t = e.target;

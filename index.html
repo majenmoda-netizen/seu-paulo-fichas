@@ -54,7 +54,8 @@
           <label>Nome do cliente<input type="text" name="clienteNome" placeholder="Para cliente novo"></label>
           <label>Telefone<input type="text" name="telefone" inputmode="tel"></label>
           <label>Endereço<input type="text" name="endereco"></label>
-          <label>Bairro (define a taxa)<select id="pedido-bairro"></select></label>
+          <label>Bairro (opcional)<select id="pedido-bairro"></select></label>
+          <label>Taxa de entrega (R$) — pode editar<input type="text" name="taxa" inputmode="decimal" placeholder="Ex.: 5,00"></label>
         </div>
         <label>Observação<input type="text" name="obs" placeholder="Ex.: sem cebola"></label>
       </form>
@@ -68,40 +69,43 @@
       <h2 class="sub">Hoje</h2>
       <div id="pedidos-resumo" class="chips-row"></div>
       <div class="chips-row"><button class="chip-btn active" data-filtro-ped="hoje" type="button">Hoje</button><button class="chip-btn" data-filtro-ped="todos" type="button">Todos</button></div>
+      <div class="chips-row" id="filtro-tipo"><button class="chip-btn active" data-filtro-tipo="todos" type="button">Tudo</button><button class="chip-btn" data-filtro-tipo="mesa" type="button">Mesas</button><button class="chip-btn" data-filtro-tipo="entrega" type="button">Entregas</button><button class="chip-btn" data-filtro-tipo="balcao" type="button">Retiradas</button></div>
       <div id="pedidos-lista"></div>
     </section>
 
     <section class="screen" data-screen="cardapio">
-      <h1>Cardápio</h1>
-      <p class="muted small">O preço e o markup se ajustam sozinhos: mude um, e o outro recalcula. Você pode alterar qualquer um quando quiser.</p>
+      <h1>Produtos e estoque</h1>
+      <p class="muted small">Cadastre, edite e controle o estoque. Deixe o estoque em branco nos produtos que não precisa contar.</p>
       <form id="cardapio-form" class="card form-grid" onsubmit="return false">
-        <h2>Novo produto</h2>
+        <input type="hidden" name="id">
+        <h2 id="cardapio-titulo">Novo produto</h2>
         <label>Nome<input type="text" name="nome" required placeholder="Ex.: X Godinhos"></label>
-        <label>Preço de venda (R$)<input type="text" name="preco" inputmode="decimal" required placeholder="Ex.: 14,99"></label>
         <label>Categoria<input type="text" name="categoria" placeholder="Ex.: Lanches, Bebidas, Porções"></label>
-        <div class="actions"><button type="button" class="btn" id="cardapio-salvar">Cadastrar produto</button><span id="cardapio-msg" class="muted small"></span></div>
+        <label>Preço de venda (R$)<input type="text" name="preco" inputmode="decimal" required placeholder="Ex.: 14,99"></label>
+        <label>Estoque (quantidade)<input type="text" name="estoque" inputmode="decimal" placeholder="Em branco = não controla"></label>
+        <label>Avisar quando chegar em<input type="text" name="minimo" inputmode="decimal" placeholder="Ex.: 5"></label>
+        <div class="actions"><button type="button" class="btn" id="cardapio-salvar">Cadastrar produto</button><button type="button" class="link" id="cardapio-cancelar" hidden>Cancelar edição</button><span id="cardapio-msg" class="muted small"></span></div>
       </form>
-      <div id="ficha-tecnica-box" class="card" hidden></div>
+      <div id="estoque-resumo" class="chips-row"></div>
       <div id="cardapio-lista"></div>
     </section>
 
-    <section class="screen" data-screen="estoque">
-      <h1>Estoque</h1>
-      <p class="muted small">Cadastre carne, pão, açaí, chopp, bebidas e embalagens. A venda dá baixa automática nos insumos da ficha técnica de cada produto.</p>
-      <div id="estoque-alerta"></div>
-      <form id="estoque-form" class="card form-grid" onsubmit="return false">
-        <input type="hidden" name="id">
-        <h2 id="estoque-titulo">Novo insumo</h2>
-        <label>Nome<input type="text" name="nome" required placeholder="Ex.: Pão de hambúrguer"></label>
-        <label>Unidade<select name="unidade"><option>UN</option><option>KG</option><option>G</option><option>L</option><option>ML</option><option>PCT</option></select></label>
-        <label>Categoria<input type="text" name="categoria" placeholder="Carne, pão, bebida, açaí..."></label>
-        <label>Custo por unidade (R$)<input type="text" name="custo" inputmode="decimal" placeholder="Ex.: 1,20 (preço de 1 litro, 1 kg, 1 un)"></label>
-        <label>ou: valor total pago (R$)<input type="text" name="total" inputmode="decimal" placeholder="Ex.: 330 (barril inteiro) — calculo o custo por litro/kg/un"></label>
-        <label>Estoque inicial<input type="text" name="inicial" inputmode="decimal" placeholder="Ex.: 100"></label>
-        <label>Estoque mínimo (alerta)<input type="text" name="minimo" inputmode="decimal" placeholder="Ex.: 20"></label>
-        <div class="actions"><button type="button" class="btn" id="estoque-salvar">Cadastrar insumo</button><button type="button" class="link" id="estoque-cancelar" hidden>Cancelar edição</button><span id="estoque-msg" class="muted small"></span></div>
-      </form>
-      <div id="estoque-lista"></div>
+    <section class="screen" data-screen="relatorios">
+      <h1>Relatórios</h1>
+      <div class="card form-grid">
+        <label>De<input type="date" id="rel-de"></label>
+        <label>Até<input type="date" id="rel-ate"></label>
+        <div class="chips-row"><button class="chip-btn" data-rel-atalho="hoje" type="button">Hoje</button><button class="chip-btn" data-rel-atalho="semana" type="button">7 dias</button><button class="chip-btn" data-rel-atalho="mes" type="button">Este mês</button></div>
+      </div>
+      <div id="rel-resumo"></div>
+      <h2 class="sub">Baixar (abre no Excel)</h2>
+      <div class="chips-row">
+        <button class="btn" data-rel-baixar="vendas" type="button">Vendas</button>
+        <button class="btn" data-rel-baixar="produtos" type="button">Produtos vendidos</button>
+        <button class="btn" data-rel-baixar="estoque" type="button">Estoque</button>
+        <button class="btn" data-rel-baixar="clientes" type="button">Clientes</button>
+      </div>
+      <p id="rel-msg" class="muted small"></p>
     </section>
 
     <section class="screen" data-screen="vender">
@@ -179,8 +183,8 @@
 
   <nav class="tabs" aria-label="Menu">
     <button data-tab="pedidos" class="active">Pedidos</button>
-    <button data-tab="cardapio">Cardápio</button>
-    <button data-tab="estoque">Estoque</button>
+    <button data-tab="cardapio">Produtos</button>
+    <button data-tab="relatorios">Relatórios</button>
     <button data-tab="vender">Eventos</button>
   </nav>
 
@@ -191,6 +195,6 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="config.js?v=1"></script>
   <script src="app.js?v=8"></script>
-  <script src="espetinhos.js?v=19"></script>
+  <script src="espetinhos.js?v=21"></script>
 </body>
 </html>
